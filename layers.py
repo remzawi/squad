@@ -85,7 +85,7 @@ class EmbeddingWithChar(nn.Module):
         self.word_embed = nn.Embedding.from_pretrained(word_vectors)
         self.char_embed = CharEmbedding(char_vec, word_len, hidden_size, drop_prob)
         self.proj = nn.Linear(word_vectors.size(1), hidden_size, bias=False)
-        self.hwy = HighwayEncoder(2, hidden_size)
+        self.hwy = HighwayEncoder(2, 2 * hidden_size)
 
     def forward(self, x, char_x):
         word_emb = self.word_embed(x)   # (batch_size, seq_len, embed_size)
