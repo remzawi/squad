@@ -83,16 +83,18 @@ class EmbeddingWithChar(nn.Module):
         super(EmbeddingWithChar, self).__init__()
         self.drop_prob = drop_prob
         self.word_embed = nn.Embedding.from_pretrained(word_vectors)
-        self.char_embed = CharEmbedding(char_vec, word_len, hidden_size, drop_prob)
-        self.proj = nn.Linear(word_vectors.size(1), hidden_size, bias=False)
-        self.hwy = HighwayEncoder(2, 2 * hidden_size)
+        char_size = int(hidden_size*0.2)
+        word_size = hidden_size - char_size
+        self.char_embed = CharEmbedding(char_vec, word_len, char_size, drop_prob)
+        self.proj = nn.Linear(word_vectors.size(1), word_size, bias=False)
+        self.hwy = HighwayEncoder(2, hidden_size)
 
     def forward(self, x, char_x):
         word_emb = self.word_embed(x)   # (batch_size, seq_len, embed_size)
         word_emb = F.dropout(word_emb, self.drop_prob, self.training)
-        word_emb = self.proj(word_emb)  # (batch_size, seq_len, hidden_size)
-        char_emb = self.char_embed(char_x) # (batch_size, seq_len, hidden_size)
-        emb = torch.cat([word_emb, char_emb], dim = -1) # (batch_size, seq_len, 2 * hidden_size)
+        word_emb = self.proj(word_emb)  # (batch_size, seq_len, word_size)
+        char_emb = self.char_embed(char_x) # (batch_size, seq_len, char_size)
+        emb = torch.cat([word_emb, char_emb], dim = -1) # (batch_size, seq_len, hidden_size)
         emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
         return emb
 
