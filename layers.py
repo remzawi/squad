@@ -88,7 +88,7 @@ class EmbeddingWithChar(nn.Module):
         self.hwy = HighwayEncoder(2, hidden_size)
 
     def forward(self, x, char_x):
-        word_emb = self.embed(x)   # (batch_size, seq_len, embed_size)
+        word_emb = self.word_embed(x)   # (batch_size, seq_len, embed_size)
         word_emb = F.dropout(word_emb, self.drop_prob, self.training)
         word_emb = self.proj(word_emb)  # (batch_size, seq_len, hidden_size)
         char_emb = self.char_embed(char_x) # (batch_size, seq_len, hidden_size)
