@@ -54,7 +54,7 @@ def main(args):
     elif args.name == 'charembeddings':
         model = BiDAFChar(word_vectors=word_vectors,
                     char_vec = char_vec,
-                    word_len = args.char_limit,
+                    word_len = 16,
                     hidden_size=args.hidden_size,
                     drop_prob=args.drop_prob)
         
