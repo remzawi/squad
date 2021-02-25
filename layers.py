@@ -92,9 +92,8 @@ class EmbeddingWithChar(nn.Module):
         word_emb = F.dropout(word_emb, self.drop_prob, self.training)
         word_emb = self.proj(word_emb)  # (batch_size, seq_len, hidden_size)
         char_emb = self.char_embed(char_x) # (batch_size, seq_len, hidden_size)
-        emb = torch.concatenate([word_emb, char_emb], dim = -1) # (batch_size, seq_len, 2 * hidden_size)
+        emb = torch.cat([word_emb, char_emb], dim = -1) # (batch_size, seq_len, 2 * hidden_size)
         emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
-
         return emb
 
 
