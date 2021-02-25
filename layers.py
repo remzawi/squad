@@ -7,6 +7,7 @@ Author:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from util import masked_softmax
@@ -34,6 +35,64 @@ class Embedding(nn.Module):
         emb = self.embed(x)   # (batch_size, seq_len, embed_size)
         emb = F.dropout(emb, self.drop_prob, self.training)
         emb = self.proj(emb)  # (batch_size, seq_len, hidden_size)
+        emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
+
+        return emb
+    
+class CharEmbedding(nn.Module):
+    """Embedding layer used by BiDAF, without the character-level component.
+
+    Word-level embeddings are further refined using a 2-layer Highway Encoder
+    (see `HighwayEncoder` class for details).
+
+    Args:
+        char_vec (torch.Tensor): charracted embedingd file.
+        word_len (torch.Tensor): Max word len
+        drop_prob (float): Probability of zero-ing out activations
+    """
+    def __init__(self, char_vec, word_len, hidden_size, drop_prob):
+        super(CharEmbedding, self).__init__()
+        self.drop_prob = drop_prob
+        self.emb = nn.Embedding.from_pretrained(char_vec, freeze=False)
+        nn.init.uniform_(self.emb.weight, -0.001, 0.001)
+        self.char_cnn = nn.conv2d(word_len, hidden_size, (1, 5))
+        
+
+    def forward(self, x):
+        B, S, W = x.size()
+        emb = self.embed(x)   # (batch_size, seq_len, word_len, embed_size)
+        emb = F.dropout(emb, self.drop_prob, self.training)
+        emb = self.char_cnn(emb.permute(0, 2, 1, 3)) # (batch_size , hidden_size, seq_len, conv_size)
+        emb = F.relu(emb)
+        emb = torch.max(emb.permute(0, 2, 1, 3), -1)[0] # (batch_size, seq_len, hidden_size)
+
+        return emb
+    
+class EmbeddingWithChar(nn.Module):
+    """Embedding layer used by BiDAF, without the character-level component.
+
+    Word-level embeddings are further refined using a 2-layer Highway Encoder
+    (see `HighwayEncoder` class for details).
+
+    Args:
+        word_vectors (torch.Tensor): Pre-trained word vectors.
+        hidden_size (int): Size of hidden activations.
+        drop_prob (float): Probability of zero-ing out activations
+    """
+    def __init__(self, word_vectors, hidden_size, char_vec, word_len, drop_prob):
+        super(EmbeddingWithChar, self).__init__()
+        self.drop_prob = drop_prob
+        self.word_embed = nn.Embedding.from_pretrained(word_vectors)
+        self.char_embed = CharEmbedding(char_vec, word_len, drop_prob)
+        self.proj = nn.Linear(word_vectors.size(1), hidden_size, bias=False)
+        self.hwy = HighwayEncoder(2, hidden_size)
+
+    def forward(self, x, char_x):
+        word_emb = self.embed(x)   # (batch_size, seq_len, embed_size)
+        word_emb = F.dropout(word_emb, self.drop_prob, self.training)
+        word_emb = self.proj(word_emb)  # (batch_size, seq_len, hidden_size)
+        char_emb = self.char_embed(char_x) # (batch_size, seq_len, hidden_size)
+        emb = torch.concatenate([word_emb, char_emb], dim = -1) # (batch_size, seq_len, 2 * hidden_size)
         emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
 
         return emb
@@ -220,3 +279,41 @@ class BiDAFOutput(nn.Module):
         log_p2 = masked_softmax(logits_2.squeeze(), mask, log_softmax=True)
 
         return log_p1, log_p2
+    
+    
+class PositionalEncoding(nn.Module):
+    """
+    Implements a non-trainable positional encoder based on sin and cos functions
+    Based on the implementation originaly proposed
+    Adapted to Pytorch based on https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+
+    Args:
+        nn ([type]): [description]
+    """
+    def __init__(self, hidden_size, drop_prob, para_limit):
+        super(PositionalEncoding, self).__init__()
+        self.drop_prob = drop_prob
+
+        pe = torch.zeros(para_limit, hidden_size)
+        position = torch.arange(0, para_limit, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, hidden_size, 2).float() * (-math.log(10000.0) / hidden_size))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]
+        x = F.dropout(x, self.drop_prob, self.training)
+        return x
+    
+class DWConv(nn.Module):
+    def __init__(self, nin, nout):
+        super(DWConv, self).__init__()
+        self.depthwise = nn.Conv1d(nin, nin, kernel_size=7, padding=1, groups=nin)
+        self.pointwise = nn.Conv1d(nin, nout, kernel_size=1)
+
+    def forward(self, x):
+        out = self.depthwise(x)
+        out = self.pointwise(out)
+        return out
