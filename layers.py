@@ -395,7 +395,7 @@ class FeedForwardBlock(nn.Module):
 class EncoderBlock(nn.Module):
     def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
         super(EncoderBlock, self).__init__()
-        self.resize = input_size == output_size
+        self.resize = input_size != output_size
         if self.resize:
             self.init_resize = DWConv(input_size, output_size, kernel_size)
         self.pos = PositionalEncoding(output_size, drop_prob, para_limit)
