@@ -17,7 +17,7 @@ import util
 from args import get_train_args
 from collections import OrderedDict
 from json import dumps
-from models import BiDAF, BiDAFChar
+from models import BiDAF, BiDAFChar, QANet
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from ujson import load as json_load
@@ -57,6 +57,16 @@ def main(args):
                     word_len = 16,
                     hidden_size=args.hidden_size,
                     drop_prob=args.drop_prob)
+    elif args.name == 'qanet':
+        model = QANet(word_vectors=word_vectors,
+                      char_vec=char_vec,
+                      word_len= 16,
+                      para_limit = 400,
+                      emb_size = args.hidden_size,
+                      enc_size = 128,
+                      drop_prob=args.drop_prob)
+    else:
+        raise ValueError('Wrong model name')
         
     model = nn.DataParallel(model, args.gpu_ids)
     if args.load_path:
@@ -76,8 +86,13 @@ def main(args):
                                  log=log)
 
     # Get optimizer and scheduler
-    optimizer = optim.Adadelta(model.parameters(), args.lr,
+    if args.name == 'qanet':
+        optimizer = optim.Adam(model.parameters(), args.lr,
+                               betas=(0.8, 0.999),
                                weight_decay=args.l2_wd)
+    else:
+        optimizer = optim.Adadelta(model.parameters(), args.lr,
+                                   weight_decay=args.l2_wd)
     scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
 
     # Get data loader

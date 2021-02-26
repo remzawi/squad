@@ -402,7 +402,8 @@ class EncoderBlock(nn.Module):
         self.att = SelfAttentionBlock(output_size, n_head, drop_prob, att_drop_prob)
         self.ff = FeedForwardBlock(output_size, drop_prob)
     def forward(self, x):
-        out = self.first_conv(x)
+        out = self.pos(x)      
+        out = self.first_conv(out)
         out = self.convs(out)
         out = self.att(out)
         out = self.ff(out)
