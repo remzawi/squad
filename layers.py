@@ -287,9 +287,6 @@ class PositionalEncoding(nn.Module):
     Implements a non-trainable positional encoder based on sin and cos functions
     Based on the implementation originaly proposed
     Adapted to Pytorch based on https://pytorch.org/tutorials/beginner/transformer_tutorial.html
-
-    Args:
-        nn ([type]): [description]
     """
     def __init__(self, hidden_size, drop_prob, para_limit):
         super(PositionalEncoding, self).__init__()
@@ -308,13 +305,135 @@ class PositionalEncoding(nn.Module):
         x = F.dropout(x, self.drop_prob, self.training)
         return x
     
+    
 class DWConv(nn.Module):
-    def __init__(self, nin, nout):
+    def __init__(self, nin, nout, kernel_size):
         super(DWConv, self).__init__()
-        self.depthwise = nn.Conv1d(nin, nin, kernel_size=7, padding=1, groups=nin)
+        self.depthwise = nn.Conv1d(nin, nin, kernel_size=kernel_size, padding=1, groups=nin)
         self.pointwise = nn.Conv1d(nin, nout, kernel_size=1)
 
     def forward(self, x):
         out = self.depthwise(x)
         out = self.pointwise(out)
+        return F.relu(out)
+    
+class ConvBlock(nn.Module):
+    def __init__(self, input_size, hidden_size, kernel_size, drop_prob):
+        super(ConvBlock, self).__init__()
+        self.conv = DWConv(input_size, hidden_size, kernel_size)
+        self.drop_prob = drop_prob
+        self.norm = nn.LayerNorm(input_size)
+    def forward(self, x):
+        norm = self.norm(x)
+        conv = self.conv(norm)
+        return F.Dropout(x + conv, self.drop_prob, self.training)
+    
+class SelfAttention(nn.Module):
+    """
+    Self attention adapted from homework 5
+    """
+    def __init__(self, hidden_size, n_head, drop_prob):
+        super(SelfAttention, self).__init__()
+        assert hidden_size % n_head == 0
+        # key, query, value projections for all heads
+        self.key = nn.Linear(hidden_size, hidden_size)
+        self.query = nn.Linear(hidden_size, hidden_size)
+        self.value = nn.Linear(hidden_size, hidden_size)
+        # regularization
+        self.attn_drop = nn.Dropout(drop_prob)
+        #self.resid_drop = nn.Dropout(drop_prob)
+        # output projection
+        #self.proj = nn.Linear(hidden_size, hidden_size)
+        # causal mask to ensure that attention is only applied to the left in the input sequence
+        self.n_head = n_head
+
+    def forward(self, x):
+        B, T, C = x.size()
+
+        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
+        k = self.key(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        v = self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+
+        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        #att = att.masked_fill(self.mask[:,:,:T,:T] == 0, -1e10) # no need for masking
+        att = F.softmax(att, dim=-1)
+        att = self.attn_drop(att)
+        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+
+        # output projection
+        #y = self.resid_drop(self.proj(y))
+        return y
+    
+class SelfAttentionBlock(nn.Module):
+    def __init__(self, hidden_size, n_head, drop_prob, att_drop_prob = None):
+        super(SelfAttentionBlock, self).__init__()
+        if att_drop_prob is None:
+            att_drop_prob = drop_prob
+        self.att = SelfAttention(hidden_size, n_head, att_drop_prob)
+        self.norm = nn.LayerNorm(hidden_size)
+        self.drop_prob = drop_prob
+        
+    def forward(self, x):
+        norm = self.norm(x)
+        att = self.att(x)
+        return F.Dropout(x + att, self.drop_prob, self.training)
+    
+class FeedForwardBlock(nn.Module):
+    def __init__(self, hidden_size, drop_prob):
+        super(FeedForwardBlock, self).__init__()
+        self.proj = nn.Linear(hidden_size, hidden_size)
+        self.norm = nn.LayerNorm(hidden_size)
+        self.drop_prob = drop_prob
+    def forward(self, x):
+        norm = self.norm(x)
+        proj = F.relu(self.proj(norm))
+        return F.Dropout(x + proj, self.drop_prob, self.training)
+    
+class EncoderBlock(nn.Module):
+    def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None):
+        super(EncoderBlock, self).__init__()
+        self.pos = PositionalEncoding(input_size, drop_prob, para_limit)
+        self.first_conv = ConvBlock(input_size, output_size, kernel_size, drop_prob)
+        if n_conv > 1:
+            self.convs = nn.ModuleList([ConvBlock(output_size, output_size, kernel_size, drop_prob) for i in range(n_conv - 1)])
+        self.att = SelfAttentionBlock(output_size, n_head, drop_prob, att_drop_prob)
+        self.ff = FeedForwardBlock(output_size, drop_prob)
+    def forward(self, x):
+        out = self.first_conv(x)
+        out = self.convs(out)
+        out = self.att(out)
+        out = self.ff(out)
         return out
+    
+class StackedEncoderBlocks(nn.Module):
+    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None):
+        super(StackedEncoderBlocks, self).__init__()
+        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, hidden_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None)
+                                       for i in range(n_blocks)])
+    def forward(self, x):
+        return self.encoders(x)
+    
+class OutputBlock(nn.Module):
+    def __init__(self, hidden_size):
+        super(OutputBlock, self).__init__() 
+        self.proj = nn.Linear(2 * hidden_size, 1, bias=False)
+        
+    def forward(self, x1, x2, mask):
+        x = torch.cat([x1, x2], dim = -1)
+        proj = self.proj(x)
+        log_p = masked_softmax(proj.squeeze(), mask, log_softmax=True)
+        return log_p
+        
+           
+
+    
+    
+
+        
+
+
+
+        
