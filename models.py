@@ -144,7 +144,8 @@ class QANet(nn.Module):
                                     hidden_size=emb_size,
                                     char_vec = char_vec,
                                     word_len = word_len,
-                                    drop_prob = drop_prob)
+                                    drop_prob = drop_prob,
+                                    char_prop=0.4)
         
         self.emb_enc = layers.EncoderBlock(input_size=emb_size,
                                            para_limit=para_limit,

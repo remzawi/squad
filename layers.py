@@ -79,11 +79,11 @@ class EmbeddingWithChar(nn.Module):
         hidden_size (int): Size of hidden activations.
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, word_vectors, hidden_size, char_vec, word_len, drop_prob):
+    def __init__(self, word_vectors, hidden_size, char_vec, word_len, drop_prob, char_prop=0.2):
         super(EmbeddingWithChar, self).__init__()
         self.drop_prob = drop_prob
         self.word_embed = nn.Embedding.from_pretrained(word_vectors)
-        char_size = int(hidden_size*0.2)
+        char_size = int(hidden_size*char_prop)
         word_size = hidden_size - char_size
         self.char_embed = CharEmbedding(char_vec, word_len, char_size, drop_prob)
         self.proj = nn.Linear(word_vectors.size(1), word_size, bias=False)
