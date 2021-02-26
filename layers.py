@@ -392,7 +392,7 @@ class FeedForwardBlock(nn.Module):
         return self.drop(x + proj)
     
 class EncoderBlock(nn.Module):
-    def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
+    def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 1.0):
         super(EncoderBlock, self).__init__()
         self.resize = input_size != output_size
         if self.resize:
@@ -404,6 +404,7 @@ class EncoderBlock(nn.Module):
         self.n_layers = n_conv + 2
         self.final_prob = final_prob
         self.drop = nn.Dropout(drop_prob)
+        self.do_depth = final_prob < 1
     def forward(self, x):
         if self.resize:
             out = self.init_resize(x)
@@ -411,12 +412,24 @@ class EncoderBlock(nn.Module):
             out = self.pos(out)    
         else:
             out = self.pos(x) 
-        for i, conv in enumerate(self.convs):
-            out = self.drop_layer(out, conv, 1 - (i+1)/self.n_layers*(1-self.final_prob))
-        #out = self.convs(out)
-        out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
-        out = self.drop_layer(out, self.ff, self.final_prob)
-        return out
+        if self.do_depth:
+            for i, conv in enumerate(self.convs):
+                out = self.drop_layer(out, conv, 1 - (i+1)/self.n_layers*(1-self.final_prob))
+            #out = self.convs(out)
+            out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
+            out = self.drop_layer(out, self.ff, self.final_prob)
+            return out
+        else:
+            for i, conv in enumerate(self.convs):
+                out = conv(out)
+
+            #out = self.convs(out)
+            out = self.att(out)
+            out = self.ff(out)
+            #out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
+            #out = self.drop_layer(out, self.ff, self.final_prob)
+            return out
+            
     def drop_layer(self, x, layer, prob):
         if self.training:
             if torch.rand(1) < prob:
