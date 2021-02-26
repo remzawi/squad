@@ -309,13 +309,13 @@ class PositionalEncoding(nn.Module):
 class DWConv(nn.Module):
     def __init__(self, nin, nout, kernel_size):
         super(DWConv, self).__init__()
-        self.depthwise = nn.Conv1d(nin, nin, kernel_size=kernel_size//2, padding=1, groups=nin)
+        self.depthwise = nn.Conv1d(nin, nin, kernel_size=kernel_size, padding=kernel_size//2, groups=nin)
         self.pointwise = nn.Conv1d(nin, nout, kernel_size=1)
 
     def forward(self, x):
-        out = self.depthwise(x)
+        out = self.depthwise(x.permute(0,2,1))
         out = self.pointwise(out)
-        return F.relu(out)
+        return F.relu(out.permute(0,1,2))
     
 class ConvBlock(nn.Module):
     def __init__(self, input_size, hidden_size, kernel_size, drop_prob):
@@ -325,7 +325,7 @@ class ConvBlock(nn.Module):
         self.norm = nn.LayerNorm(input_size)
     def forward(self, x):
         norm = self.norm(x)
-        conv = self.conv(norm.permute(0,2,1)).permute(0,2,1)
+        conv = self.conv(norm)
         return F.dropout(x + conv, self.drop_prob, self.training)
     
 class SelfAttention(nn.Module):
@@ -395,19 +395,25 @@ class FeedForwardBlock(nn.Module):
 class EncoderBlock(nn.Module):
     def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
         super(EncoderBlock, self).__init__()
-        self.pos = PositionalEncoding(input_size, drop_prob, para_limit)
-        self.first_conv = ConvBlock(input_size, output_size, kernel_size, drop_prob)
-        if n_conv > 1:
-            self.convs = nn.ModuleList([ConvBlock(output_size, output_size, kernel_size, drop_prob) for i in range(n_conv - 1)])
+        self.resize = input_size == output_size
+        if self.resize:
+            self.init_resize = DWConv(input_size, output_size, kernel_size)
+        self.pos = PositionalEncoding(output_size, drop_prob, para_limit)
+        self.convs = nn.ModuleList([ConvBlock(output_size, output_size, kernel_size, drop_prob) for i in range(n_conv)])
         self.att = SelfAttentionBlock(output_size, n_head, drop_prob, att_drop_prob)
         self.ff = FeedForwardBlock(output_size, drop_prob)
         self.n_layers = n_conv + 2
         self.final_prob = final_prob
+        self.drop_prob = drop_prob
     def forward(self, x):
-        out = self.pos(x)     
-        out = self.drop_layer(x, self.first_conv, 1 - 1/self.n_layers*(1-self.final_prob))
+        if self.resize:
+            out = self.init_resize(x)
+            out = F.dropout(out, self.drop_prob)
+            out = self.pos(out)    
+        else:
+            out = self.pos(x) 
         for i, conv in enumerate(self.convs):
-            out = self.drop_layer(out, conv, 1 - (i+2)/self.n_layers*(1-self.final_prob))
+            out = self.drop_layer(out, conv, 1 - (i+1)/self.n_layers*(1-self.final_prob))
         #out = self.convs(out)
         out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
         out = self.drop_layer(out, self.ff, self.final_prob)
