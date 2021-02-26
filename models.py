@@ -165,7 +165,7 @@ class QANet(nn.Module):
                                                      n_conv=2,
                                                      kernel_size=5,
                                                      drop_prob=drop_prob,
-                                                     n_head=8,
+                                                     n_head=4,
                                                      att_drop_prob=drop_prob)
         
         self.out_beg = layers.OutputBlock(4*enc_size)
