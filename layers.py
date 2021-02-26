@@ -434,7 +434,9 @@ class StackedEncoderBlocks(nn.Module):
         self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, hidden_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None)
                                        for i in range(n_blocks)])
     def forward(self, x):
-        return self.encoders(x)
+        for encoder in self.encoders:
+            x = encoder(x)
+        return x
     
 class OutputBlock(nn.Module):
     def __init__(self, hidden_size):
