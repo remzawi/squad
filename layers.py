@@ -326,7 +326,7 @@ class ConvBlock(nn.Module):
     def forward(self, x):
         norm = self.norm(x)
         conv = self.conv(norm.permute(0,2,1)).permute(0,2,1)
-        return F.Dropout(x + conv, self.drop_prob, self.training)
+        return F.dropout(x + conv, self.drop_prob, self.training)
     
 class SelfAttention(nn.Module):
     """
@@ -379,7 +379,7 @@ class SelfAttentionBlock(nn.Module):
     def forward(self, x):
         norm = self.norm(x)
         att = self.att(x)
-        return F.Dropout(x + att, self.drop_prob, self.training)
+        return F.dropout(x + att, self.drop_prob, self.training)
     
 class FeedForwardBlock(nn.Module):
     def __init__(self, hidden_size, drop_prob):
@@ -390,7 +390,7 @@ class FeedForwardBlock(nn.Module):
     def forward(self, x):
         norm = self.norm(x)
         proj = F.relu(self.proj(norm))
-        return F.Dropout(x + proj, self.drop_prob, self.training)
+        return F.dropout(x + proj, self.drop_prob, self.training)
     
 class EncoderBlock(nn.Module):
     def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
