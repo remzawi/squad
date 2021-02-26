@@ -391,27 +391,28 @@ class FeedForwardBlock(nn.Module):
         proj = F.relu(self.proj(norm))
         return self.drop(x + proj)
     
+class Resizer(nn.Module):
+    def __init__(self, input_size, output_size, drop_prob):
+        super(Resizer, self).__init__()
+        self.conv = DWConv(input_size, output_size, 1)
+        self.drop = nn.Dropout(drop_prob)
+    def forward(self, x):
+        out = self.conv(x)
+        return self.drop(out)
+    
 class EncoderBlock(nn.Module):
-    def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
+    def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
         super(EncoderBlock, self).__init__()
-        self.resize = input_size != output_size
-        if self.resize:
-            self.init_resize = DWConv(input_size, output_size, kernel_size)
-        self.pos = PositionalEncoding(output_size, drop_prob, para_limit)
-        self.convs = nn.ModuleList([ConvBlock(output_size, output_size, kernel_size, drop_prob) for i in range(n_conv)])
-        self.att = SelfAttentionBlock(output_size, n_head, drop_prob, att_drop_prob)
-        self.ff = FeedForwardBlock(output_size, drop_prob)
+        self.pos = PositionalEncoding(enc_size, drop_prob, para_limit)
+        self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob) for i in range(n_conv)])
+        self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob)
+        self.ff = FeedForwardBlock(enc_size, drop_prob)
         self.n_layers = n_conv + 2
         self.final_prob = final_prob
         self.drop = nn.Dropout(drop_prob)
         self.do_depth = final_prob < 1
     def forward(self, x):
-        if self.resize:
-            out = self.init_resize(x)
-            out = self.drop(out)
-            out = self.pos(out)    
-        else:
-            out = self.pos(x) 
+        out = self.pos(x) 
         if self.do_depth:
             for i, conv in enumerate(self.convs):
                 out = self.drop_layer(out, conv, 1 - (i+1)/self.n_layers*(1-self.final_prob))
@@ -443,7 +444,7 @@ class EncoderBlock(nn.Module):
 class StackedEncoderBlocks(nn.Module):
     def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None):
         super(StackedEncoderBlocks, self).__init__()
-        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, hidden_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None)
+        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None)
                                        for i in range(n_blocks)])
     def forward(self, x):
         for encoder in self.encoders:
