@@ -309,7 +309,7 @@ class PositionalEncoding(nn.Module):
 class DWConv(nn.Module):
     def __init__(self, nin, nout, kernel_size):
         super(DWConv, self).__init__()
-        self.depthwise = nn.Conv1d(nin, nin, kernel_size=kernel_size, padding=1, groups=nin)
+        self.depthwise = nn.Conv1d(nin, nin, kernel_size=kernel_size//2, padding=1, groups=nin)
         self.pointwise = nn.Conv1d(nin, nout, kernel_size=1)
 
     def forward(self, x):
@@ -325,7 +325,7 @@ class ConvBlock(nn.Module):
         self.norm = nn.LayerNorm(input_size)
     def forward(self, x):
         norm = self.norm(x)
-        conv = self.conv(norm)
+        conv = self.conv(norm.permute(0,2,1)).permute(0,2,1)
         return F.Dropout(x + conv, self.drop_prob, self.training)
     
 class SelfAttention(nn.Module):
@@ -393,7 +393,7 @@ class FeedForwardBlock(nn.Module):
         return F.Dropout(x + proj, self.drop_prob, self.training)
     
 class EncoderBlock(nn.Module):
-    def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None):
+    def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
         super(EncoderBlock, self).__init__()
         self.pos = PositionalEncoding(input_size, drop_prob, para_limit)
         self.first_conv = ConvBlock(input_size, output_size, kernel_size, drop_prob)
@@ -401,13 +401,25 @@ class EncoderBlock(nn.Module):
             self.convs = nn.ModuleList([ConvBlock(output_size, output_size, kernel_size, drop_prob) for i in range(n_conv - 1)])
         self.att = SelfAttentionBlock(output_size, n_head, drop_prob, att_drop_prob)
         self.ff = FeedForwardBlock(output_size, drop_prob)
+        self.n_layers = n_conv + 2
     def forward(self, x):
-        out = self.pos(x)      
-        out = self.first_conv(out)
-        out = self.convs(out)
-        out = self.att(out)
-        out = self.ff(out)
+        out = self.pos(x)     
+        out = self.drop_layer(x, self.first_conv, 1 - 1/self.n_layers*(1-final_prob))
+        for i, conv in enumerate(self.convs):
+            out = self.drop_layer(out, conv, 1 - (i+2)/self.n_layers*(1-final_prob))
+        #out = self.convs(out)
+        out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-final_prob))
+        out = self.drop_layer(out, self.ff, final_prob)
         return out
+    def drop_layer(self, x, layer, prob):
+        if self.training:
+            if torch.rand(1) < prob:
+                return layer(x)
+            else:
+                return x
+        else:
+            return layer(x)
+            
     
 class StackedEncoderBlocks(nn.Module):
     def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None):
