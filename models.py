@@ -145,7 +145,7 @@ class QANet(nn.Module):
                                     char_vec = char_vec,
                                     word_len = word_len,
                                     drop_prob = drop_prob,
-                                    char_prop=0.4)
+                                    char_prop=0.2)
         
         self.emb_resize = layers.Resizer(input_size=emb_size,
                                          output_size=enc_size,
@@ -156,7 +156,7 @@ class QANet(nn.Module):
                                            n_conv=4,
                                            kernel_size=7,
                                            drop_prob=drop_prob,
-                                           n_head=8,
+                                           n_head=4,
                                            att_drop_prob=drop_prob)
         
         self.att = layers.BiDAFAttention(hidden_size=enc_size,
@@ -172,7 +172,7 @@ class QANet(nn.Module):
                                                      n_conv=2,
                                                      kernel_size=5,
                                                      drop_prob=drop_prob,
-                                                     n_head=8,
+                                                     n_head=4,
                                                      att_drop_prob=drop_prob)
         
         self.out_beg = layers.OutputBlock(enc_size)
