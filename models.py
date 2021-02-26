@@ -189,8 +189,8 @@ class QANet(nn.Module):
         out2 = self.model_enc(out1) # (batch_size, c_len, 4 * enc_size)
         out3 = self.model_enc(out2) # (batch_size, c_len, 4 * enc_size)
         
-        log_p1 = self.out_beg(out1, out2) # (batch_size, c_len)
-        log_p2 = self.out_end(out2, out3) # (batch_size, c_len)
+        log_p1 = self.out_beg(out1, out2, c_mask) # (batch_size, c_len)
+        log_p2 = self.out_end(out2, out3, c_mask) # (batch_size, c_len)
         
         return log_p1, log_p2
 

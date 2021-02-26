@@ -392,7 +392,7 @@ class FeedForwardBlock(nn.Module):
         return self.drop(x + proj)
     
 class EncoderBlock(nn.Module):
-    def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 1.0):
+    def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
         super(EncoderBlock, self).__init__()
         self.resize = input_size != output_size
         if self.resize:
