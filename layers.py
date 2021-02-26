@@ -26,14 +26,14 @@ class Embedding(nn.Module):
     """
     def __init__(self, word_vectors, hidden_size, drop_prob):
         super(Embedding, self).__init__()
-        self.drop_prob = drop_prob
+        self.drop = nn.Dropout(drop_prob)
         self.embed = nn.Embedding.from_pretrained(word_vectors)
         self.proj = nn.Linear(word_vectors.size(1), hidden_size, bias=False)
         self.hwy = HighwayEncoder(2, hidden_size)
 
     def forward(self, x):
         emb = self.embed(x)   # (batch_size, seq_len, embed_size)
-        emb = F.dropout(emb, self.drop_prob, self.training)
+        emb = self.drop(emb)
         emb = self.proj(emb)  # (batch_size, seq_len, hidden_size)
         emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
 
@@ -52,7 +52,7 @@ class CharEmbedding(nn.Module):
     """
     def __init__(self, char_vec, word_len, hidden_size, drop_prob):
         super(CharEmbedding, self).__init__()
-        self.drop_prob = drop_prob
+        self.drop = nn.Dropout(drop_prob)
         self.embed = nn.Embedding.from_pretrained(char_vec, freeze=False)
         nn.init.uniform_(self.embed.weight, -0.001, 0.001)
         self.char_cnn = nn.Conv2d(word_len, hidden_size, (1, 5))
@@ -61,7 +61,7 @@ class CharEmbedding(nn.Module):
     def forward(self, x):
         B, S, W = x.size()
         emb = self.embed(x)   # (batch_size, seq_len, word_len, embed_size)
-        emb = F.dropout(emb, self.drop_prob, self.training)
+        emb = self.drop(emb)
         emb = self.char_cnn(emb.permute(0, 2, 1, 3)) # (batch_size , hidden_size, seq_len, conv_size)
         emb = F.relu(emb)
         emb = torch.max(emb.permute(0, 2, 1, 3), -1)[0] # (batch_size, seq_len, hidden_size)
@@ -81,7 +81,7 @@ class EmbeddingWithChar(nn.Module):
     """
     def __init__(self, word_vectors, hidden_size, char_vec, word_len, drop_prob, char_prop=0.2):
         super(EmbeddingWithChar, self).__init__()
-        self.drop_prob = drop_prob
+        self.drop = nn.Dropout(drop_prob)
         self.word_embed = nn.Embedding.from_pretrained(word_vectors)
         char_size = int(hidden_size*char_prop)
         word_size = hidden_size - char_size
@@ -91,7 +91,7 @@ class EmbeddingWithChar(nn.Module):
 
     def forward(self, x, char_x):
         word_emb = self.word_embed(x)   # (batch_size, seq_len, embed_size)
-        word_emb = F.dropout(word_emb, self.drop_prob, self.training)
+        word_emb = self.drop(word_emb)
         word_emb = self.proj(word_emb)  # (batch_size, seq_len, word_size)
         char_emb = self.char_embed(char_x) # (batch_size, seq_len, char_size)
         emb = torch.cat([word_emb, char_emb], dim = -1) # (batch_size, seq_len, hidden_size)
@@ -192,7 +192,7 @@ class BiDAFAttention(nn.Module):
     """
     def __init__(self, hidden_size, drop_prob=0.1):
         super(BiDAFAttention, self).__init__()
-        self.drop_prob = drop_prob
+        self.drop = nn.Dropout(drop_prob)
         self.c_weight = nn.Parameter(torch.zeros(hidden_size, 1))
         self.q_weight = nn.Parameter(torch.zeros(hidden_size, 1))
         self.cq_weight = nn.Parameter(torch.zeros(1, 1, hidden_size))
@@ -230,8 +230,8 @@ class BiDAFAttention(nn.Module):
             Equation 1 in https://arxiv.org/abs/1611.01603
         """
         c_len, q_len = c.size(1), q.size(1)
-        c = F.dropout(c, self.drop_prob, self.training)  # (bs, c_len, hid_size)
-        q = F.dropout(q, self.drop_prob, self.training)  # (bs, q_len, hid_size)
+        c = self.drop(c)  # (bs, c_len, hid_size)
+        q = self.drop(q)  # (bs, q_len, hid_size)
 
         # Shapes: (batch_size, c_len, q_len)
         s0 = torch.matmul(c, self.c_weight).expand([-1, -1, q_len])
@@ -290,8 +290,7 @@ class PositionalEncoding(nn.Module):
     """
     def __init__(self, hidden_size, drop_prob, para_limit):
         super(PositionalEncoding, self).__init__()
-        self.drop_prob = drop_prob
-
+        self.drop = nn.Dropout(drop_prob)
         pe = torch.zeros(para_limit, hidden_size)
         position = torch.arange(0, para_limit, dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, hidden_size, 2).float() * (-math.log(10000.0) / hidden_size))
@@ -302,7 +301,7 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         x = x + self.pe[:x.size(0), :]
-        x = F.dropout(x, self.drop_prob, self.training)
+        x = self.drop(x)
         return x
     
     
@@ -321,12 +320,12 @@ class ConvBlock(nn.Module):
     def __init__(self, input_size, hidden_size, kernel_size, drop_prob):
         super(ConvBlock, self).__init__()
         self.conv = DWConv(input_size, hidden_size, kernel_size)
-        self.drop_prob = drop_prob
+        self.drop = nn.Dropout(drop_prob)
         self.norm = nn.LayerNorm(input_size)
     def forward(self, x):
         norm = self.norm(x)
         conv = self.conv(norm)
-        return F.dropout(x + conv, self.drop_prob, self.training)
+        return self.drop(x + conv)
     
 class SelfAttention(nn.Module):
     """
@@ -374,23 +373,23 @@ class SelfAttentionBlock(nn.Module):
             att_drop_prob = drop_prob
         self.att = SelfAttention(hidden_size, n_head, att_drop_prob)
         self.norm = nn.LayerNorm(hidden_size)
-        self.drop_prob = drop_prob
+        self.drop = nn.Dropout(drop_prob)
         
     def forward(self, x):
         norm = self.norm(x)
         att = self.att(x)
-        return F.dropout(x + att, self.drop_prob, self.training)
+        return self.drop(x+att)
     
 class FeedForwardBlock(nn.Module):
     def __init__(self, hidden_size, drop_prob):
         super(FeedForwardBlock, self).__init__()
         self.proj = nn.Linear(hidden_size, hidden_size)
         self.norm = nn.LayerNorm(hidden_size)
-        self.drop_prob = drop_prob
+        self.drop = nn.Dropout(drop_prob)
     def forward(self, x):
         norm = self.norm(x)
         proj = F.relu(self.proj(norm))
-        return F.dropout(x + proj, self.drop_prob, self.training)
+        return self.drop(x + proj)
     
 class EncoderBlock(nn.Module):
     def __init__(self, input_size, para_limit, output_size, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
@@ -404,11 +403,11 @@ class EncoderBlock(nn.Module):
         self.ff = FeedForwardBlock(output_size, drop_prob)
         self.n_layers = n_conv + 2
         self.final_prob = final_prob
-        self.drop_prob = drop_prob
+        self.drop = nn.Dropout(drop_prob)
     def forward(self, x):
         if self.resize:
             out = self.init_resize(x)
-            out = F.dropout(out, self.drop_prob)
+            out = self.drop(out)
             out = self.pos(out)    
         else:
             out = self.pos(x) 
