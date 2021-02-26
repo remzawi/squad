@@ -402,14 +402,15 @@ class EncoderBlock(nn.Module):
         self.att = SelfAttentionBlock(output_size, n_head, drop_prob, att_drop_prob)
         self.ff = FeedForwardBlock(output_size, drop_prob)
         self.n_layers = n_conv + 2
+        self.final_prob = final_prob
     def forward(self, x):
         out = self.pos(x)     
-        out = self.drop_layer(x, self.first_conv, 1 - 1/self.n_layers*(1-final_prob))
+        out = self.drop_layer(x, self.first_conv, 1 - 1/self.n_layers*(1-self.final_prob))
         for i, conv in enumerate(self.convs):
-            out = self.drop_layer(out, conv, 1 - (i+2)/self.n_layers*(1-final_prob))
+            out = self.drop_layer(out, conv, 1 - (i+2)/self.n_layers*(1-self.final_prob))
         #out = self.convs(out)
-        out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-final_prob))
-        out = self.drop_layer(out, self.ff, final_prob)
+        out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
+        out = self.drop_layer(out, self.ff, self.final_prob)
         return out
     def drop_layer(self, x, layer, prob):
         if self.training:
