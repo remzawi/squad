@@ -315,7 +315,7 @@ class DWConv(nn.Module):
     def forward(self, x):
         out = self.depthwise(x.permute(0,2,1))
         out = self.pointwise(out)
-        return F.relu(out.permute(0,1,2))
+        return F.relu(out.permute(0,2,1))
     
 class ConvBlock(nn.Module):
     def __init__(self, input_size, hidden_size, kernel_size, drop_prob):
