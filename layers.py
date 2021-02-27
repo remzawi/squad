@@ -462,7 +462,7 @@ class SelfAttentionBlock(nn.Module):
         
     def forward(self, x, mask = None):
         norm = self.norm(x)
-        att = self.att(x, mask=mask)
+        att = self.att(norm,  mask=mask)
         return self.drop(x+att)
     
 class TorchAttentionBlock(nn.Module):
@@ -477,7 +477,7 @@ class TorchAttentionBlock(nn.Module):
         
     def forward(self, x, mask = None):
         norm = self.norm(x)
-        att = self.att(x, x, x, key_padding_mask=mask)
+        att = self.att(norm, norm, norm, key_padding_mask=mask)
         return self.drop(x+att)
     
 class FeedForwardBlock(nn.Module):

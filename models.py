@@ -202,7 +202,7 @@ class QANet(nn.Module):
         out3 = self.model_enc(out2, c_mask) # (batch_size, c_len, enc_size)
         
         log_p1 = self.out_beg(out1, out2, c_mask) # (batch_size, c_len)
-        log_p2 = self.out_end(out2, out3, c_mask) # (batch_size, c_len)
+        log_p2 = self.out_end(out1, out3, c_mask) # (batch_size, c_len)
         
         return log_p1, log_p2
     
@@ -271,7 +271,7 @@ class TorchQANet(nn.Module):
         out3 = self.model_enc(out2, c_mask) # (batch_size, c_len, enc_size)
         
         log_p1 = self.out_beg(out1, out2, c_mask) # (batch_size, c_len)
-        log_p2 = self.out_end(out2, out3, c_mask) # (batch_size, c_len)
+        log_p2 = self.out_end(out1, out3, c_mask) # (batch_size, c_len)
         
         return log_p1, log_p2
 
