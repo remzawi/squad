@@ -426,8 +426,11 @@ class SelfAttention2(nn.Module):
 
         # shape (n_heads * batch_size, seq_len, seq_len)
         # Normalise the distributions, using the same mask for all heads.
+        mask = mask.repeat(1, n_heads).view(batch_size * n_heads, seq_len)
+        while mask.dim() < scaled_similarities.dim():
+            mask = mask.unsqueeze(1)
         attention = masked_softmax(scaled_similarities,
-                                   mask.repeat(1, n_heads).view(batch_size * n_heads, seq_len))
+                                   mask)
         attention = self.drop(attention)
 
         # Take a weighted sum of the values with respect to the attention
