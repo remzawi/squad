@@ -63,7 +63,7 @@ def main(args):
                       word_len= 16,
                       para_limit = 400,
                       emb_size = args.hidden_size,
-                      enc_size = 96,
+                      enc_size = 128,
                       drop_prob=args.drop_prob)
     elif args.name == 'tqanet':
         model = TorchQANet(word_vectors=word_vectors,
