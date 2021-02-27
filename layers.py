@@ -575,7 +575,7 @@ class EncoderBlock(nn.Module):
     
 class EncoderBlock2(nn.Module):
     def __init__(self, enc_size,  n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
-        super(EncoderBlock, self).__init__()
+        super(EncoderBlock2, self).__init__()
         self.pos = PositionalEncoding2(enc_size, drop_prob)
         self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob) for i in range(n_conv)])
         self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob)
