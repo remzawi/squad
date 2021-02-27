@@ -138,7 +138,7 @@ class BiDAFChar(nn.Module):
 
 
 class QANet(nn.Module):
-    def __init__(self, word_vectors, char_vec, word_len, para_limit, emb_size, enc_size=128, drop_prob=0.):
+    def __init__(self, word_vectors, char_vec, word_len,  emb_size, enc_size=128, drop_prob=0.1, c_lim = 400, q_lim = 50):
         super(QANet, self).__init__()
         self.emb = layers.EmbeddingWithChar(word_vectors=word_vectors,
                                     hidden_size=emb_size,
@@ -151,13 +151,13 @@ class QANet(nn.Module):
                                          output_size=enc_size,
                                          drop_prob=drop_prob)
         
-        self.emb_enc = layers.EncoderBlock(enc_size=enc_size,
-                                           para_limit=para_limit,
+        self.emb_enc = layers.EncoderBlock2(enc_size=enc_size,
                                            n_conv=4,
                                            kernel_size=7,
                                            drop_prob=drop_prob,
                                            n_head=8,
-                                           att_drop_prob=drop_prob)
+                                           att_drop_prob=drop_prob,
+                                           final_prob=0.9)
         
         self.att = layers.BiDAFAttention(hidden_size=enc_size,
                                          drop_prob=drop_prob)
@@ -168,16 +168,22 @@ class QANet(nn.Module):
         
         self.model_enc = layers.StackedEncoderBlocks(n_blocks=7,
                                                      hidden_size=enc_size,
-                                                     para_limit=para_limit,
+                                                     para_limit=c_lim,
                                                      n_conv=2,
                                                      kernel_size=5,
                                                      drop_prob=drop_prob,
                                                      n_head=8,
-                                                     att_drop_prob=drop_prob)
+                                                     att_drop_prob=drop_prob,
+                                                     final_prob=0.9)
         
         self.out_beg = layers.OutputBlock(enc_size)
         
         self.out_end = layers.OutputBlock(enc_size)
+        
+        self.c_lim = c_lim
+        self.q_lim = q_lim
+        
+        
         
     def forward(self, cw_idxs, cc_idxs, qw_idxs, qc_idxs):
         c_mask = torch.zeros_like(cw_idxs) != cw_idxs
@@ -189,8 +195,8 @@ class QANet(nn.Module):
         c_res_emb = self.emb_resize(c_emb)  # (batch_size, c_len, enc_size)
         q_res_emb = self.emb_resize(q_emb)  # (batch_size, q_len, enc_size)
         
-        c_enc = self.emb_enc(c_res_emb, c_mask)    # (batch_size, c_len, enc_size)
-        q_enc = self.emb_enc(q_res_emb, q_mask)    # (batch_size, q_len, enc_size)
+        c_enc = self.emb_enc(c_res_emb, c_mask, self.c_lim)    # (batch_size, c_len, enc_size)
+        q_enc = self.emb_enc(q_res_emb, q_mask, self.q_lim)    # (batch_size, q_len, enc_size)
         
         att = self.att(c_enc, q_enc,
                        c_mask, q_mask)    # (batch_size, c_len, 4 * enc_size)

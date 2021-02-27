@@ -85,7 +85,7 @@ class EmbeddingWithChar(nn.Module):
         self.word_embed = nn.Embedding.from_pretrained(word_vectors)
         char_size = int(hidden_size*char_prop)
         word_size = hidden_size - char_size
-        self.char_embed = CharEmbedding(char_vec, word_len, char_size, drop_prob)
+        self.char_embed = CharEmbedding(char_vec, word_len, char_size, drop_prob = 0.05)
         self.proj = nn.Linear(word_vectors.size(1), word_size, bias=False)
         self.hwy = HighwayEncoder(2, hidden_size)
 
@@ -304,6 +304,28 @@ class PositionalEncoding(nn.Module):
         x = self.drop(x)
         return x
     
+class PositionalEncoding2(nn.Module):
+    """
+    Implements a non-trainable positional encoder based on sin and cos functions
+    Based on the implementation originaly proposed
+    Adapted to Pytorch based on https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+    """
+    def __init__(self, hidden_size, drop_prob):
+        super(PositionalEncoding2, self).__init__()
+        self.drop = nn.Dropout(drop_prob)
+        self.hidden_size = hidden_size
+
+    def forward(self, x, para_limit):
+        pe = torch.zeros(para_limit, self.hidden_size)
+        position = torch.arange(0, self.para_limit, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, self.hidden_size, 2).float() * (-math.log(10000.0) / self.hidden_size))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        x = x + self.pe[:x.size(0), :]
+        x = self.drop(x)
+        return x
+    
     
 class DWConv(nn.Module):
     def __init__(self, nin, nout, kernel_size):
@@ -357,6 +379,8 @@ class SelfAttention(nn.Module):
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         if mask is not None:
+            while mask.dim() < att.dim():
+                mask = mask.unsqueeze(1)
             att = masked_softmax(att, mask, dim=-1)
         else:
             att = F.softmax(att, dim=-1)
@@ -456,7 +480,7 @@ class SelfAttentionBlock(nn.Module):
         super(SelfAttentionBlock, self).__init__()
         if att_drop_prob is None:
             att_drop_prob = drop_prob
-        self.att = SelfAttention2(hidden_size, n_head, att_drop_prob)
+        self.att = SelfAttention(hidden_size, n_head, att_drop_prob)
         self.norm = nn.LayerNorm(hidden_size)
         self.drop = nn.Dropout(drop_prob)
         
@@ -511,14 +535,16 @@ class EncoderBlock(nn.Module):
         self.final_prob = final_prob
         self.drop = nn.Dropout(drop_prob)
         self.do_depth = final_prob < 1
-    def forward(self, x, mask = None):
+    def forward(self, x, mask = None, init_drop = 1, total_layers = None):
+        if total_layers is None:
+            total_layers = self.n_layers
         out = self.pos(x) 
         if self.do_depth:
             for i, conv in enumerate(self.convs):
-                out = self.drop_layer(out, conv, 1 - (i+1)/self.n_layers*(1-self.final_prob))
+                out = self.drop_layer(out, conv, 1 - (i+init_drop)/total_layers*(1-self.final_prob))
             #out = self.convs(out)
-            out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob), mask)
-            out = self.drop_layer(out, self.ff, self.final_prob)
+            out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask)
+            out = self.drop_layer(out, self.ff, 1 - (init_drop + self.n_layers - 1)/total_layers*(1-self.final_prob))
             return out
         else:
             for i, conv in enumerate(self.convs):
@@ -545,7 +571,53 @@ class EncoderBlock(nn.Module):
                 return layer(x, mask)
             else:
                 return layer(x)
+    
+    
+class EncoderBlock2(nn.Module):
+    def __init__(self, enc_size,  n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
+        super(EncoderBlock, self).__init__()
+        self.pos = PositionalEncoding2(enc_size, drop_prob)
+        self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob) for i in range(n_conv)])
+        self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob)
+        self.ff = FeedForwardBlock(enc_size, drop_prob)
+        self.n_layers = n_conv + 2
+        self.final_prob = final_prob
+        self.drop = nn.Dropout(drop_prob)
+        self.do_depth = final_prob < 1
+    def forward(self, x, para_limit, mask = None, init_drop =1, total_layers=None):
+        out = self.pos(x, para_limit) 
+        if self.do_depth:
+            for i, conv in enumerate(self.convs):
+                out = self.drop_layer(out, conv, 1 - (i+init_drop)/total_layers*(1-self.final_prob))
+            #out = self.convs(out)
+            out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask)
+            out = self.drop_layer(out, self.ff, 1 - (init_drop + self.n_layers - 1)/total_layers*(1-self.final_prob))
+            return out
+        else:
+            for i, conv in enumerate(self.convs):
+                out = conv(out)
+
+            #out = self.convs(out)
+            out = self.att(out, mask)
+            out = self.ff(out)
+            #out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
+            #out = self.drop_layer(out, self.ff, self.final_prob)
+            return out
             
+    def drop_layer(self, x, layer, prob, mask = None):
+        if self.training:
+            if torch.rand(1) < prob:
+                if mask is not None:
+                    return layer(x, mask)
+                else:
+                    return layer(x)
+            else:
+                return x
+        else:
+            if mask is not None:
+                return layer(x, mask)
+            else:
+                return layer(x)            
     
 class TorchEncoderBlock(nn.Module):
     def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
@@ -594,13 +666,17 @@ class TorchEncoderBlock(nn.Module):
                 return layer(x)   
     
 class StackedEncoderBlocks(nn.Module):
-    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None):
+    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
         super(StackedEncoderBlocks, self).__init__()
-        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None)
+        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob=final_prob)
                                        for i in range(n_blocks)])
+        self.total_layers = (n_conv + 2) * n_blocks
+        self.layer_per_block = n_conv + 2
     def forward(self, x, mask = None):
+        current_init = 1
         for encoder in self.encoders:
-            x = encoder(x, mask)
+            x = encoder(x, mask, current_init, self.total_layers)
+            current_init += self.layer_per_block
         return x
     
 class TorchStackedEncoderBlocks(nn.Module):

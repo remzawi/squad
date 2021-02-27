@@ -62,7 +62,6 @@ def main(args):
         model = QANet(word_vectors=word_vectors,
                       char_vec=char_vec,
                       word_len= 16,
-                      para_limit = 400,
                       emb_size = args.hidden_size,
                       enc_size = 128,
                       drop_prob=args.drop_prob)
@@ -70,7 +69,6 @@ def main(args):
         model = TorchQANet(word_vectors=word_vectors,
                       char_vec=char_vec,
                       word_len= 16,
-                      para_limit = 400,
                       emb_size = args.hidden_size,
                       enc_size = 128,
                       drop_prob=args.drop_prob)
