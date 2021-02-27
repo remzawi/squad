@@ -317,7 +317,7 @@ class PositionalEncoding2(nn.Module):
 
     def forward(self, x, para_limit):
         pe = torch.zeros(para_limit, self.hidden_size)
-        position = torch.arange(0, self.para_limit, dtype=torch.float).unsqueeze(1)
+        position = torch.arange(0, para_limit, dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, self.hidden_size, 2).float() * (-math.log(10000.0) / self.hidden_size))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
