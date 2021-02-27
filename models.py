@@ -152,7 +152,7 @@ class QANet(nn.Module):
                                          drop_prob=drop_prob)
         
         self.emb_enc = layers.EncoderBlock(enc_size=enc_size,
-                                           para_limit=c_lim,
+                                           para_limit=1000,
                                            n_conv=4,
                                            kernel_size=7,
                                            drop_prob=drop_prob,
@@ -169,7 +169,7 @@ class QANet(nn.Module):
         
         self.model_enc = layers.StackedEncoderBlocks(n_blocks=7,
                                                      hidden_size=enc_size,
-                                                     para_limit=c_lim,
+                                                     para_limit=1000,
                                                      n_conv=2,
                                                      kernel_size=5,
                                                      drop_prob=drop_prob,

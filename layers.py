@@ -288,7 +288,7 @@ class PositionalEncoding(nn.Module):
     Based on the implementation originaly proposed
     Adapted to Pytorch based on https://pytorch.org/tutorials/beginner/transformer_tutorial.html
     """
-    def __init__(self, hidden_size, drop_prob, para_limit):
+    def __init__(self, hidden_size, drop_prob, para_limit=1000):
         super(PositionalEncoding, self).__init__()
         self.drop = nn.Dropout(drop_prob)
         pe = torch.zeros(para_limit, hidden_size)
@@ -474,6 +474,7 @@ class SelfAttention2(nn.Module):
         # shape (batch_size, seq_len, input_size)
         outputs = self.out_proj(outputs)
         return outputs
+    
     
 class SelfAttentionBlock(nn.Module):
     def __init__(self, hidden_size, n_head, drop_prob, att_drop_prob = None):

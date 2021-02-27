@@ -96,7 +96,8 @@ def main(args):
     if args.name == 'qanet' or args.name == 'tqanet':
         optimizer = optim.Adam(model.parameters(), args.lr,
                                betas=(0.8, 0.999),
-                               weight_decay=3*1e-7)
+                               weight_decay=3*1e-7,
+                               eps=1e-7)
         scheduler = warmup(optimizer, 1, 1000)
     else:
         optimizer = optim.Adadelta(model.parameters(), args.lr,
@@ -142,7 +143,8 @@ def main(args):
 
                 # Backward
                 loss.backward()
-                nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                if args.name != 'qanet':
+                    nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 optimizer.step()
                 scheduler.step(step // batch_size)
                 ema(model, step // batch_size)
