@@ -357,8 +357,9 @@ class SelfAttention(nn.Module):
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         if mask is not None:
-           att = att.masked_fill(mask[:,:,:T,:T] == 0, -1e10) # no need for masking
-        att = F.softmax(att, dim=-1)
+            att = masked_softmax(att, mask)
+        else:
+            att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
@@ -427,13 +428,13 @@ class EncoderBlock(nn.Module):
         self.final_prob = final_prob
         self.drop = nn.Dropout(drop_prob)
         self.do_depth = final_prob < 1
-    def forward(self, x):
+    def forward(self, x, mask = None):
         out = self.pos(x) 
         if self.do_depth:
             for i, conv in enumerate(self.convs):
                 out = self.drop_layer(out, conv, 1 - (i+1)/self.n_layers*(1-self.final_prob))
             #out = self.convs(out)
-            out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
+            out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob), mask)
             out = self.drop_layer(out, self.ff, self.final_prob)
             return out
         else:
@@ -441,20 +442,26 @@ class EncoderBlock(nn.Module):
                 out = conv(out)
 
             #out = self.convs(out)
-            out = self.att(out)
+            out = self.att(out, mask)
             out = self.ff(out)
             #out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
             #out = self.drop_layer(out, self.ff, self.final_prob)
             return out
             
-    def drop_layer(self, x, layer, prob):
+    def drop_layer(self, x, layer, prob, mask = None):
         if self.training:
             if torch.rand(1) < prob:
-                return layer(x)
+                if mask is not None:
+                    return layer(x, mask)
+                else:
+                    return layer(x)
             else:
                 return x
         else:
-            return layer(x)
+            if mask is not None:
+                return layer(x, mask)
+            else:
+                return layer(x)
             
     
 class TorchEncoderBlock(nn.Module):
@@ -474,7 +481,7 @@ class TorchEncoderBlock(nn.Module):
             for i, conv in enumerate(self.convs):
                 out = self.drop_layer(out, conv, 1 - (i+1)/self.n_layers*(1-self.final_prob))
             #out = self.convs(out)
-            out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
+            out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob), mask)
             out = self.drop_layer(out, self.ff, self.final_prob)
             return out
         else:
@@ -491,11 +498,17 @@ class TorchEncoderBlock(nn.Module):
     def drop_layer(self, x, layer, prob):
         if self.training:
             if torch.rand(1) < prob:
-                return layer(x)
+                if mask is not None:
+                    return layer(x, mask)
+                else:
+                    return layer(x)
             else:
                 return x
         else:
-            return layer(x)    
+            if mask is not None:
+                return layer(x, mask)
+            else:
+                return layer(x)   
     
 class StackedEncoderBlocks(nn.Module):
     def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None):

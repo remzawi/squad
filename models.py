@@ -189,17 +189,17 @@ class QANet(nn.Module):
         c_res_emb = self.emb_resize(c_emb)  # (batch_size, c_len, enc_size)
         q_res_emb = self.emb_resize(q_emb)  # (batch_size, q_len, enc_size)
         
-        c_enc = self.emb_enc(c_res_emb)    # (batch_size, c_len, enc_size)
-        q_enc = self.emb_enc(q_res_emb)    # (batch_size, q_len, enc_size)
+        c_enc = self.emb_enc(c_res_emb, c_mask)    # (batch_size, c_len, enc_size)
+        q_enc = self.emb_enc(q_res_emb, q_mask)    # (batch_size, q_len, enc_size)
         
         att = self.att(c_enc, q_enc,
                        c_mask, q_mask)    # (batch_size, c_len, 4 * enc_size)
         
         att_res = self.att_resize(att)  # (batch_size, c_len, enc_size)
         
-        out1 = self.model_enc(att_res)  # (batch_size, c_len, enc_size)
-        out2 = self.model_enc(out1) # (batch_size, c_len, enc_size)
-        out3 = self.model_enc(out2) # (batch_size, c_len, enc_size)
+        out1 = self.model_enc(att_res, c_mask)  # (batch_size, c_len, enc_size)
+        out2 = self.model_enc(out1, c_mask) # (batch_size, c_len, enc_size)
+        out3 = self.model_enc(out2, c_mask) # (batch_size, c_len, enc_size)
         
         log_p1 = self.out_beg(out1, out2, c_mask) # (batch_size, c_len)
         log_p2 = self.out_end(out2, out3, c_mask) # (batch_size, c_len)
