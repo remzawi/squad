@@ -13,6 +13,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as sched
 import torch.utils.data as data
 import util
+from adamW import AdamW
 
 from args import get_train_args
 from collections import OrderedDict
@@ -63,7 +64,7 @@ def main(args):
                       char_vec=char_vec,
                       word_len= 16,
                       emb_size = args.hidden_size,
-                      enc_size = 128,
+                      enc_size = 96,
                       drop_prob=args.drop_prob)
     elif args.name == 'tqanet':
         model = TorchQANet(word_vectors=word_vectors,
@@ -94,7 +95,11 @@ def main(args):
 
     # Get optimizer and scheduler
     if args.name == 'qanet' or args.name == 'tqanet':
-        optimizer = optim.Adam(model.parameters(), args.lr,
+        #optimizer = optim.Adam(model.parameters(), args.lr,
+        #                       betas=(0.8, 0.999),
+        #                       weight_decay=3*1e-7,
+        #                       eps=1e-7)
+        optimizer = AdamW(model.parameters(), args.lr,
                                betas=(0.8, 0.999),
                                weight_decay=3*1e-7,
                                eps=1e-7)
