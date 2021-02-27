@@ -598,9 +598,9 @@ class StackedEncoderBlocks(nn.Module):
         super(StackedEncoderBlocks, self).__init__()
         self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None)
                                        for i in range(n_blocks)])
-    def forward(self, x):
+    def forward(self, x, mask = None):
         for encoder in self.encoders:
-            x = encoder(x)
+            x = encoder(x, mask)
         return x
     
 class TorchStackedEncoderBlocks(nn.Module):
