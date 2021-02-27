@@ -368,12 +368,92 @@ class SelfAttention(nn.Module):
         #y = self.resid_drop(self.proj(y))
         return y
     
+class SelfAttention2(nn.Module):
+    """
+    Self attention adapted from https://github.com/yizhongw/allennlp/blob/master/allennlp/modules/seq2seq_encoders/multi_head_self_attention.py
+    """
+    def __init__(self,
+                 hidden_size,
+                 n_head,
+                 drop_prob):
+        super(SelfAttention2, self).__init__()
+
+        self.n_head = n_head
+        self.hidden_size = hidden_size
+        assert hidden_size%n_head == 0
+
+        self.comb_proj = nn.Linear(hidden_size, 3 * hidden_size)
+
+        self.scale = (hidden_size // n_head) ** 0.5
+        self.out_proj = nn.Linear(hidden_size, hidden_size)
+        self.drop = nn.Dropout(drop_prob)
+
+
+    def forward(self,  x, mask = None):
+
+        n_heads = self.n_head
+
+        batch_size, seq_len, _ = x.size()
+        if mask is None:
+            mask = x.new_ones(batch_size, seq_len)
+
+        # Shape (batch_size, seq_len, 2 * attention_dim + values_dim)
+        combined_projection = self.comb_proj(x)
+        # split by attention dim - if values_dim > attention_dim, we will get more
+        # than 3 elements returned. All of the rest are the values vector, so we
+        # just concatenate them back together again below.
+        queries, keys, values = combined_projection.split(self.hidden_size, -1)
+        queries = queries.contiguous()
+        keys = keys.contiguous()
+        values = values.contiguous()
+        # Shape (n_heads * batch_size, seq_len, values_dim / n_heads)
+        values_per_head = values.view(batch_size, seq_len, n_heads, int(self.hidden_size/n_heads))
+        values_per_head = values_per_head.transpose(1, 2).contiguous()
+        values_per_head = values_per_head.view(batch_size * n_heads, seq_len, int(self.hidden_size/n_heads))
+
+        # Shape (n_heads * batch_size, seq_len, attention_dim / n_heads)
+        queries_per_head = queries.view(batch_size, seq_len, n_heads, int(self.hidden_size/n_heads))
+        queries_per_head = queries_per_head.transpose(1, 2).contiguous()
+        queries_per_head = queries_per_head.view(batch_size * n_heads, seq_len, int(self.hidden_size/n_heads))
+
+        # Shape (n_heads * batch_size, seq_len, attention_dim / n_heads)
+        keys_per_head = keys.view(batch_size, seq_len, n_heads, int(self.hidden_size/n_heads))
+        keys_per_head = keys_per_head.transpose(1, 2).contiguous()
+        keys_per_head = keys_per_head.view(batch_size * n_heads, seq_len, int(self.hidden_size/n_heads))
+
+        # shape (n_heads * batch_size, seq_len, seq_len)
+        scaled_similarities = torch.bmm(queries_per_head / self.scale, keys_per_head.transpose(1, 2))
+
+        # shape (n_heads * batch_size, seq_len, seq_len)
+        # Normalise the distributions, using the same mask for all heads.
+        attention = masked_softmax(scaled_similarities,
+                                   mask.repeat(1, n_heads).view(batch_size * n_heads, seq_len))
+        attention = self.drop(attention)
+
+        # Take a weighted sum of the values with respect to the attention
+        # distributions for each element in the n_heads * batch_size dimension.
+        # shape (n_heads * batch_size, seq_len, values_dim/n_heads)
+        #outputs = weighted_sum(values_per_head, attention)
+        outputs = attention.bmm(values_per_head)
+        # Reshape back to original shape (batch_size, seq_len, values_dim)
+        # shape (batch_size, n_heads, seq_len, values_dim/n_heads)
+        outputs = outputs.view(batch_size, n_heads, seq_len, int(self.hidden_size / n_heads))
+        # shape (batch_size, seq_len, n_heads, values_dim/n_heads)
+        outputs = outputs.transpose(1, 2).contiguous()
+        # shape (batch_size, seq_len, values_dim)
+        outputs = outputs.view(batch_size, seq_len, self.hidden_size)
+
+        # Project back to original input size.
+        # shape (batch_size, seq_len, input_size)
+        outputs = self.out_proj(outputs)
+        return outputs
+    
 class SelfAttentionBlock(nn.Module):
     def __init__(self, hidden_size, n_head, drop_prob, att_drop_prob = None):
         super(SelfAttentionBlock, self).__init__()
         if att_drop_prob is None:
             att_drop_prob = drop_prob
-        self.att = SelfAttention(hidden_size, n_head, att_drop_prob)
+        self.att = SelfAttention2(hidden_size, n_head, att_drop_prob)
         self.norm = nn.LayerNorm(hidden_size)
         self.drop = nn.Dropout(drop_prob)
         
@@ -495,7 +575,7 @@ class TorchEncoderBlock(nn.Module):
             #out = self.drop_layer(out, self.ff, self.final_prob)
             return out
             
-    def drop_layer(self, x, layer, prob):
+    def drop_layer(self, x, layer, prob, mask = None):
         if self.training:
             if torch.rand(1) < prob:
                 if mask is not None:
