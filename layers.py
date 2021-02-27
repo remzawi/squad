@@ -480,7 +480,7 @@ class SelfAttentionBlock(nn.Module):
         super(SelfAttentionBlock, self).__init__()
         if att_drop_prob is None:
             att_drop_prob = drop_prob
-        self.att = SelfAttention(hidden_size, n_head, att_drop_prob)
+        self.att = SelfAttention2(hidden_size, n_head, att_drop_prob)
         self.norm = nn.LayerNorm(hidden_size)
         self.drop = nn.Dropout(drop_prob)
         
