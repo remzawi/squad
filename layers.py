@@ -357,7 +357,7 @@ class SelfAttention(nn.Module):
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         if mask is not None:
-            att = masked_softmax(att, mask)
+            att = masked_softmax(att, mask, dim=-1)
         else:
             att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
