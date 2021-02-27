@@ -65,6 +65,14 @@ def main(args):
                       emb_size = args.hidden_size,
                       enc_size = 96,
                       drop_prob=args.drop_prob)
+    elif args.name == 'tqanet':
+        model = TorchQANet(word_vectors=word_vectors,
+                      char_vec=char_vec,
+                      word_len= 16,
+                      para_limit = 400,
+                      emb_size = args.hidden_size,
+                      enc_size = 128,
+                      drop_prob=args.drop_prob)
     else:
         raise ValueError('Wrong model name')
         
@@ -89,10 +97,10 @@ def main(args):
     if args.name == 'qanet':
         optimizer = optim.Adam(model.parameters(), args.lr,
                                betas=(0.8, 0.999),
-                               weight_decay=args.l2_wd)
+                               weight_decay=3*1e-7)
     else:
         optimizer = optim.Adadelta(model.parameters(), args.lr,
-                                   weight_decay=args.l2_wd)
+                                   weight_decay=3*1e-7)
     scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
 
     # Get data loader

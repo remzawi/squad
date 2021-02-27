@@ -346,7 +346,7 @@ class SelfAttention(nn.Module):
         # causal mask to ensure that attention is only applied to the left in the input sequence
         self.n_head = n_head
 
-    def forward(self, x):
+    def forward(self, x, mask = None):
         B, T, C = x.size()
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -356,7 +356,8 @@ class SelfAttention(nn.Module):
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        #att = att.masked_fill(self.mask[:,:,:T,:T] == 0, -1e10) # no need for masking
+        if mask is not None:
+           att = att.masked_fill(mask[:,:,:T,:T] == 0, -1e10) # no need for masking
         att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
@@ -375,9 +376,24 @@ class SelfAttentionBlock(nn.Module):
         self.norm = nn.LayerNorm(hidden_size)
         self.drop = nn.Dropout(drop_prob)
         
-    def forward(self, x):
+    def forward(self, x, mask = None):
         norm = self.norm(x)
-        att = self.att(x)
+        att = self.att(x, mask=mask)
+        return self.drop(x+att)
+    
+class TorchAttentionBlock(nn.Module):
+    def __init__(self, hidden_size, n_head, drop_prob, att_drop_prob = None):
+        super(TorchAttentionBlock, self).__init__()
+        if att_drop_prob is None:
+            att_drop_prob = drop_prob
+        self.att = SelfAttention(hidden_size, n_head, att_drop_prob)
+        self.att = nn.MultiheadAttention(hidden_size, n_head, drop_prob)
+        self.norm = nn.LayerNorm(hidden_size)
+        self.drop = nn.Dropout(drop_prob)
+        
+    def forward(self, x, mask = None):
+        norm = self.norm(x)
+        att = self.att(x, x, x, key_padding_mask=mask)
         return self.drop(x+att)
     
 class FeedForwardBlock(nn.Module):
@@ -441,6 +457,46 @@ class EncoderBlock(nn.Module):
             return layer(x)
             
     
+class TorchEncoderBlock(nn.Module):
+    def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
+        super(TorchEncoderBlock, self).__init__()
+        self.pos = PositionalEncoding(enc_size, drop_prob, para_limit)
+        self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob) for i in range(n_conv)])
+        self.att = TorchAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob)
+        self.ff = FeedForwardBlock(enc_size, drop_prob)
+        self.n_layers = n_conv + 2
+        self.final_prob = final_prob
+        self.drop = nn.Dropout(drop_prob)
+        self.do_depth = final_prob < 1
+    def forward(self, x, mask = None):
+        out = self.pos(x) 
+        if self.do_depth:
+            for i, conv in enumerate(self.convs):
+                out = self.drop_layer(out, conv, 1 - (i+1)/self.n_layers*(1-self.final_prob))
+            #out = self.convs(out)
+            out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
+            out = self.drop_layer(out, self.ff, self.final_prob)
+            return out
+        else:
+            for i, conv in enumerate(self.convs):
+                out = conv(out)
+
+            #out = self.convs(out)
+            out = self.att(out, mask)
+            out = self.ff(out)
+            #out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
+            #out = self.drop_layer(out, self.ff, self.final_prob)
+            return out
+            
+    def drop_layer(self, x, layer, prob):
+        if self.training:
+            if torch.rand(1) < prob:
+                return layer(x)
+            else:
+                return x
+        else:
+            return layer(x)    
+    
 class StackedEncoderBlocks(nn.Module):
     def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None):
         super(StackedEncoderBlocks, self).__init__()
@@ -451,6 +507,17 @@ class StackedEncoderBlocks(nn.Module):
             x = encoder(x)
         return x
     
+class TorchStackedEncoderBlocks(nn.Module):
+    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None):
+        super(TorchStackedEncoderBlocks, self).__init__()
+        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None)
+                                       for i in range(n_blocks)])
+    def forward(self, x, mask = None):
+        for encoder in self.encoders:
+            x = encoder(x, mask)
+        return x    
+
+
 class OutputBlock(nn.Module):
     def __init__(self, hidden_size):
         super(OutputBlock, self).__init__() 
