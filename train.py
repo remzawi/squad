@@ -18,7 +18,7 @@ from adamW import AdamW
 from args import get_train_args
 from collections import OrderedDict
 from json import dumps
-from models import BiDAF, BiDAFChar, QANet, TorchQANet
+from models import BiDAF, BiDAFChar, QANet
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from ujson import load as json_load
@@ -64,14 +64,6 @@ def main(args):
                       char_vec=char_vec,
                       word_len= 16,
                       emb_size = args.hidden_size,
-                      enc_size = 128,
-                      drop_prob=args.drop_prob)
-    elif args.name == 'tqanet':
-        model = TorchQANet(word_vectors=word_vectors,
-                      char_vec=char_vec,
-                      word_len= 16,
-                      emb_size = args.hidden_size,
-                      enc_size = 128,
                       drop_prob=args.drop_prob)
     else:
         raise ValueError('Wrong model name')
@@ -94,7 +86,7 @@ def main(args):
                                  log=log)
 
     # Get optimizer and scheduler
-    #if args.name == 'qanet' or args.name == 'tqanet':
+    #if args.name == 'qanet' :
         #optimizer = optim.Adam(model.parameters(), args.lr,
         #                       betas=(0.8, 0.999),
         #                       weight_decay=3*1e-7,

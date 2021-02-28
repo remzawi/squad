@@ -282,13 +282,45 @@ class BiDAFOutput(nn.Module):
         return log_p1, log_p2
     
     
+    
+class CharEmbeddingDW(nn.Module):
+    """Embedding layer used by BiDAF, without the character-level component.
+
+    Word-level embeddings are further refined using a 2-layer Highway Encoder
+    (see `HighwayEncoder` class for details).
+
+    Args:
+        char_vec (torch.Tensor): charracted embedingd file.
+        word_len (torch.Tensor): Max word len
+        drop_prob (float): Probability of zero-ing out activations
+    """
+    def __init__(self, char_vec, word_len, hidden_size, drop_prob):
+        super(CharEmbeddingDW, self).__init__()
+        self.drop = nn.Dropout(drop_prob)
+        self.embed = nn.Embedding.from_pretrained(char_vec, freeze=False)
+        nn.init.uniform_(self.embed.weight, -0.001, 0.001)
+        self.char_cnn = DWConv(word_len, hidden_size, 5, False)
+        self.hidden_size=hidden_size
+        
+
+    def forward(self, x):
+        B, S, W = x.size()
+        emb = self.embed(x)   # (batch_size, seq_len, word_len, embed_size)
+        emb = self.drop(emb)
+        emb = self.char_cnn(emb.view(B*S, W, -1)).view(B,S,self.hidden_size,-1) # (batch_size , seq_len, hidden_size, conv_size)
+        emb = F.relu(emb)
+        emb = torch.max(emb, -1)[0] # (batch_size, seq_len, hidden_size)
+
+        return emb
+    
+    
 class PositionalEncoding(nn.Module):
     """
     Implements a non-trainable positional encoder based on sin and cos functions
     Based on the implementation originaly proposed
     Adapted to Pytorch based on https://pytorch.org/tutorials/beginner/transformer_tutorial.html
     """
-    def __init__(self, hidden_size, drop_prob, para_limit=1000):
+    def __init__(self, hidden_size, drop_prob, para_limit=1000, scale=False):
         super(PositionalEncoding, self).__init__()
         self.drop = nn.Dropout(drop_prob)
         pe = torch.zeros(para_limit, hidden_size)
@@ -298,9 +330,14 @@ class PositionalEncoding(nn.Module):
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0).transpose(0, 1)
         self.register_buffer('pe', pe)
+        if scale:
+            self.scale_fact = hidden_size ** 0.5
+        else:
+            self.scale_fact = 1
+        
 
     def forward(self, x):
-        x = x + self.pe[:x.size(0), :]
+        x = x*self.scale_fact + self.pe[:x.size(0), :]
         x = self.drop(x)
         return x
     
@@ -620,51 +657,6 @@ class EncoderBlock2(nn.Module):
             else:
                 return layer(x)            
     
-class TorchEncoderBlock(nn.Module):
-    def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
-        super(TorchEncoderBlock, self).__init__()
-        self.pos = PositionalEncoding(enc_size, drop_prob, para_limit)
-        self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob) for i in range(n_conv)])
-        self.att = TorchAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob)
-        self.ff = FeedForwardBlock(enc_size, drop_prob)
-        self.n_layers = n_conv + 2
-        self.final_prob = final_prob
-        self.drop = nn.Dropout(drop_prob)
-        self.do_depth = final_prob < 1
-    def forward(self, x, mask = None):
-        out = self.pos(x) 
-        if self.do_depth:
-            for i, conv in enumerate(self.convs):
-                out = self.drop_layer(out, conv, 1 - (i+1)/self.n_layers*(1-self.final_prob))
-            #out = self.convs(out)
-            out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob), mask)
-            out = self.drop_layer(out, self.ff, self.final_prob)
-            return out
-        else:
-            for i, conv in enumerate(self.convs):
-                out = conv(out)
-
-            #out = self.convs(out)
-            out = self.att(out, mask)
-            out = self.ff(out)
-            #out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
-            #out = self.drop_layer(out, self.ff, self.final_prob)
-            return out
-            
-    def drop_layer(self, x, layer, prob, mask = None):
-        if self.training:
-            if torch.rand(1) < prob:
-                if mask is not None:
-                    return layer(x, mask)
-                else:
-                    return layer(x)
-            else:
-                return x
-        else:
-            if mask is not None:
-                return layer(x, mask)
-            else:
-                return layer(x)   
     
 class StackedEncoderBlocks(nn.Module):
     def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
@@ -679,16 +671,7 @@ class StackedEncoderBlocks(nn.Module):
             x = encoder(x, mask, current_init, self.total_layers)
             current_init += self.layer_per_block
         return x
-    
-class TorchStackedEncoderBlocks(nn.Module):
-    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None):
-        super(TorchStackedEncoderBlocks, self).__init__()
-        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None)
-                                       for i in range(n_blocks)])
-    def forward(self, x, mask = None):
-        for encoder in self.encoders:
-            x = encoder(x, mask)
-        return x    
+  
 
 
 class OutputBlock(nn.Module):
