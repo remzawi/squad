@@ -64,7 +64,7 @@ def main(args):
                       char_vec=char_vec,
                       word_len= 16,
                       emb_size = args.hidden_size,
-                      enc_size = 96,
+                      enc_size = 128,
                       drop_prob=args.drop_prob)
     elif args.name == 'tqanet':
         model = TorchQANet(word_vectors=word_vectors,
@@ -148,8 +148,7 @@ def main(args):
 
                 # Backward
                 loss.backward()
-                if args.name != 'qanet':
-                    nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 optimizer.step()
                 scheduler.step(step // batch_size)
                 ema(model, step // batch_size)

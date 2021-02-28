@@ -149,23 +149,25 @@ class QANet(nn.Module):
         
         self.emb_resize = layers.Resizer(input_size=emb_size,
                                          output_size=enc_size,
-                                         drop_prob=drop_prob)
+                                         kernel_size=7,
+                                         drop_prob=0)
         
         self.emb_enc = layers.EncoderBlock(enc_size=enc_size,
                                            para_limit=1000,
                                            n_conv=4,
                                            kernel_size=7,
                                            drop_prob=drop_prob,
-                                           n_head=2,
+                                           n_head=8,
                                            att_drop_prob=drop_prob,
-                                           final_prob=1)
+                                           final_prob=0.9)
         
         self.att = layers.BiDAFAttention(hidden_size=enc_size,
                                          drop_prob=drop_prob)
         
         self.att_resize = layers.Resizer(input_size=4*enc_size,
                                          output_size=enc_size,
-                                         drop_prob=drop_prob)
+                                         kernel_size=5,
+                                         drop_prob=0)
         
         self.model_enc = layers.StackedEncoderBlocks(n_blocks=7,
                                                      hidden_size=enc_size,
@@ -173,9 +175,9 @@ class QANet(nn.Module):
                                                      n_conv=2,
                                                      kernel_size=5,
                                                      drop_prob=drop_prob,
-                                                     n_head=2,
+                                                     n_head=8,
                                                      att_drop_prob=drop_prob,
-                                                     final_prob=1)
+                                                     final_prob=0.9)
         
         self.out_beg = layers.OutputBlock(enc_size)
         

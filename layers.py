@@ -517,9 +517,9 @@ class FeedForwardBlock(nn.Module):
         return self.drop(x + proj)
     
 class Resizer(nn.Module):
-    def __init__(self, input_size, output_size, drop_prob):
+    def __init__(self, input_size, output_size, kernel_size, drop_prob= 0):
         super(Resizer, self).__init__()
-        self.conv = DWConv(input_size, output_size, 1)
+        self.conv = DWConv(input_size, output_size, kernel_size)
         self.drop = nn.Dropout(drop_prob)
     def forward(self, x):
         out = self.conv(x)
@@ -699,7 +699,7 @@ class OutputBlock(nn.Module):
     def forward(self, x1, x2, mask):
         x = torch.cat([x1, x2], dim = -1)
         proj = self.proj(x)
-        log_p = masked_softmax(proj.squeeze(), mask, log_softmax=True)
+        log_p = masked_softmax(proj.squeeze(2), mask, log_softmax=True)
         return log_p
         
            
