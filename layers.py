@@ -328,10 +328,10 @@ class PositionalEncoding2(nn.Module):
     
     
 class DWConv(nn.Module):
-    def __init__(self, nin, nout, kernel_size):
+    def __init__(self, nin, nout, kernel_size, bias = True):
         super(DWConv, self).__init__()
-        self.depthwise = nn.Conv1d(nin, nin, kernel_size=kernel_size, padding=kernel_size//2, groups=nin)
-        self.pointwise = nn.Conv1d(nin, nout, kernel_size=1)
+        self.depthwise = nn.Conv1d(nin, nin, kernel_size=kernel_size, padding=kernel_size//2, groups=nin,bias=bias)
+        self.pointwise = nn.Conv1d(nin, nout, kernel_size=1,bias=bias)
 
     def forward(self, x):
         out = self.depthwise(x.permute(0,2,1))
@@ -409,7 +409,7 @@ class SelfAttention2(nn.Module):
         self.comb_proj = nn.Linear(hidden_size, 3 * hidden_size)
 
         self.scale = (hidden_size // n_head) ** 0.5
-        self.out_proj = nn.Linear(hidden_size, hidden_size)
+        #self.out_proj = nn.Linear(hidden_size, hidden_size)
         self.drop = nn.Dropout(drop_prob)
 
 
@@ -472,7 +472,7 @@ class SelfAttention2(nn.Module):
 
         # Project back to original input size.
         # shape (batch_size, seq_len, input_size)
-        outputs = self.out_proj(outputs)
+        #outputs = self.out_proj(outputs)
         return outputs
     
     
@@ -517,9 +517,9 @@ class FeedForwardBlock(nn.Module):
         return self.drop(x + proj)
     
 class Resizer(nn.Module):
-    def __init__(self, input_size, output_size, kernel_size, drop_prob= 0):
+    def __init__(self, input_size, output_size, kernel_size, drop_prob= 0, bias=False):
         super(Resizer, self).__init__()
-        self.conv = DWConv(input_size, output_size, kernel_size)
+        self.conv = DWConv(input_size, output_size, kernel_size,bias=bias)
         self.drop = nn.Dropout(drop_prob)
     def forward(self, x):
         out = self.conv(x)
