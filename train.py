@@ -94,20 +94,20 @@ def main(args):
                                  log=log)
 
     # Get optimizer and scheduler
-    if args.name == 'qanet' or args.name == 'tqanet':
+    #if args.name == 'qanet' or args.name == 'tqanet':
         #optimizer = optim.Adam(model.parameters(), args.lr,
         #                       betas=(0.8, 0.999),
         #                       weight_decay=3*1e-7,
         #                       eps=1e-7)
-        optimizer = AdamW(model.parameters(), args.lr,
-                               betas=(0.8, 0.999),
-                               weight_decay=3*1e-7,
-                               eps=1e-7)
-        scheduler = warmup(optimizer, 1, 1000)
-    else:
-        optimizer = optim.Adadelta(model.parameters(), args.lr,
+    #    optimizer = AdamW(model.parameters(), args.lr,
+    #                           betas=(0.8, 0.999),
+    #                           weight_decay=3*1e-7,
+    #                           eps=1e-7)
+    #    scheduler = warmup(optimizer, 1, 1000)
+    #else:
+    optimizer = optim.Adadelta(model.parameters(), args.lr,
                                    weight_decay=3*1e-7)
-        scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
+    scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
 
     # Get data loader
     log.info('Building dataset...')
