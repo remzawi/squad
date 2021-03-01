@@ -319,16 +319,18 @@ class PositionalEncoding(nn.Module):
     Implements a non-trainable positional encoder based on sin and cos functions
     Based on the implementation originaly proposed
     Adapted to Pytorch based on https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+    Input size: (batch_size, seq_len, hidden_size)
     """
     def __init__(self, hidden_size, drop_prob, para_limit=1000, scale=False):
         super(PositionalEncoding, self).__init__()
         self.drop = nn.Dropout(drop_prob)
-        pe = torch.zeros(para_limit, hidden_size)
-        position = torch.arange(0, para_limit, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, hidden_size, 2).float() * (-math.log(10000.0) / hidden_size))
-        pe[:, 0::2] = torch.sin(position * div_term)
+        pe = torch.zeros(para_limit, hidden_size) #(max_len, hidden_size)
+        position = torch.arange(0, para_limit, dtype=torch.float).unsqueeze(1) #(para_limit, 1)
+        div_term = torch.exp(torch.arange(0, hidden_size, 2).float() * (-math.log(10000.0) / hidden_size)) #(hidden_size//2)
+        pe[:, 0::2] = torch.sin(position * div_term) 
         pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0, 1)
+        pe = pe.unsqueeze(0) #(1,max_len,hidden_size)
+        #pe = pe.unsqueeze(0).transpose(0, 1) #(max_len, hidden_size)->(1,max_len,hidden_size)->(max_len,1,hidden_size)
         self.register_buffer('pe', pe)
         if scale:
             self.scale_fact = hidden_size ** 0.5
@@ -337,7 +339,7 @@ class PositionalEncoding(nn.Module):
         
 
     def forward(self, x):
-        x = x*self.scale_fact + self.pe[:x.size(0), :]
+        x = x*self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]
         x = self.drop(x)
         return x
     
@@ -401,7 +403,7 @@ class SelfAttention(nn.Module):
         self.attn_drop = nn.Dropout(drop_prob)
         #self.resid_drop = nn.Dropout(drop_prob)
         # output projection
-        #self.proj = nn.Linear(hidden_size, hidden_size)
+        self.proj = nn.Linear(hidden_size, hidden_size)
         # causal mask to ensure that attention is only applied to the left in the input sequence
         self.n_head = n_head
 
@@ -424,7 +426,7 @@ class SelfAttention(nn.Module):
         att = self.attn_drop(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
-
+        y = self.proj(y)
         # output projection
         #y = self.resid_drop(self.proj(y))
         return y
@@ -446,7 +448,7 @@ class SelfAttention2(nn.Module):
         self.comb_proj = nn.Linear(hidden_size, 3 * hidden_size)
 
         self.scale = (hidden_size // n_head) ** 0.5
-        #self.out_proj = nn.Linear(hidden_size, hidden_size)
+        self.out_proj = nn.Linear(hidden_size, hidden_size)
         self.drop = nn.Dropout(drop_prob)
 
 
@@ -509,7 +511,7 @@ class SelfAttention2(nn.Module):
 
         # Project back to original input size.
         # shape (batch_size, seq_len, input_size)
-        #outputs = self.out_proj(outputs)
+        outputs = self.out_proj(outputs)
         return outputs
     
     
@@ -682,7 +684,7 @@ class OutputBlock(nn.Module):
     def forward(self, x1, x2, mask):
         x = torch.cat([x1, x2], dim = -1)
         proj = self.proj(x)
-        log_p = masked_softmax(proj.squeeze(2), mask, log_softmax=True)
+        log_p = masked_softmax(proj.squeeze(), mask, log_softmax=True)
         return log_p
         
            
