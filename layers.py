@@ -367,15 +367,19 @@ class PositionalEncoding2(nn.Module):
     
     
 class DWConv(nn.Module):
-    def __init__(self, nin, nout, kernel_size, bias = True):
+    def __init__(self, nin, nout, kernel_size, bias = True, act = True):
         super(DWConv, self).__init__()
         self.depthwise = nn.Conv1d(nin, nin, kernel_size=kernel_size, padding=kernel_size//2, groups=nin,bias=bias)
         self.pointwise = nn.Conv1d(nin, nout, kernel_size=1,bias=bias)
+        self.act= act
 
     def forward(self, x):
         out = self.depthwise(x.permute(0,2,1))
         out = self.pointwise(out)
-        return F.relu(out.permute(0,2,1))
+        out = out.permute(0,2,1)
+        if self.act:
+            out = F.relu(out)
+        return out
     
 class ConvBlock(nn.Module):
     def __init__(self, input_size, hidden_size, kernel_size, drop_prob):
@@ -527,7 +531,7 @@ class SelfAttentionBlock(nn.Module):
     def forward(self, x, mask = None):
         norm = self.norm(x)
         att = self.att(norm,  mask=mask)
-        return self.drop(x+att)
+        return x+self.drop(att)
     
 class TorchAttentionBlock(nn.Module):
     def __init__(self, hidden_size, n_head, drop_prob, att_drop_prob = None):
@@ -553,12 +557,12 @@ class FeedForwardBlock(nn.Module):
     def forward(self, x):
         norm = self.norm(x)
         proj = F.relu(self.proj(norm))
-        return self.drop(x + proj)
+        return x + self.drop(proj)
     
 class Resizer(nn.Module):
-    def __init__(self, input_size, output_size, kernel_size, drop_prob= 0, bias=False):
+    def __init__(self, input_size, output_size, kernel_size, drop_prob= 0, bias=False, act = False):
         super(Resizer, self).__init__()
-        self.conv = DWConv(input_size, output_size, kernel_size,bias=bias)
+        self.conv = DWConv(input_size, output_size, kernel_size,bias=bias,act=False)
         self.drop = nn.Dropout(drop_prob)
     def forward(self, x):
         out = self.conv(x)
