@@ -567,7 +567,7 @@ class Resizer(nn.Module):
 class EncoderBlock(nn.Module):
     def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
         super(EncoderBlock, self).__init__()
-        self.pos = PositionalEncoding(enc_size, 0, para_limit, True)
+        self.pos = PositionalEncoding(enc_size, 0, para_limit, False)
         self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob) for i in range(n_conv)])
         self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob)
         self.ff = FeedForwardBlock(enc_size, drop_prob)
