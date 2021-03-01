@@ -54,7 +54,7 @@ class CharEmbedding(nn.Module):
         super(CharEmbedding, self).__init__()
         self.drop = nn.Dropout(drop_prob)
         self.embed = nn.Embedding.from_pretrained(char_vec, freeze=False)
-        nn.init.uniform_(self.embed.weight, -0.001, 0.001)
+        #nn.init.uniform_(self.embed.weight, -0.001, 0.001)
         self.char_cnn = nn.Conv2d(word_len, hidden_size, (1, 5))
         
 
@@ -321,7 +321,7 @@ class PositionalEncoding(nn.Module):
     Adapted to Pytorch based on https://pytorch.org/tutorials/beginner/transformer_tutorial.html
     Input size: (batch_size, seq_len, hidden_size)
     """
-    def __init__(self, hidden_size, drop_prob, para_limit=1000, scale=False):
+    def __init__(self, hidden_size, drop_prob=0, para_limit=1000, scale=False):
         super(PositionalEncoding, self).__init__()
         self.drop = nn.Dropout(drop_prob)
         pe = torch.zeros(para_limit, hidden_size) #(max_len, hidden_size)
@@ -567,7 +567,7 @@ class Resizer(nn.Module):
 class EncoderBlock(nn.Module):
     def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
         super(EncoderBlock, self).__init__()
-        self.pos = PositionalEncoding(enc_size, drop_prob, para_limit)
+        self.pos = PositionalEncoding(enc_size, 0, para_limit, True)
         self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob) for i in range(n_conv)])
         self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob)
         self.ff = FeedForwardBlock(enc_size, drop_prob)
