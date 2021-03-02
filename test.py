@@ -21,7 +21,7 @@ import util
 from args import get_test_args
 from collections import OrderedDict
 from json import dumps
-from models import BiDAF
+from models import BiDAF, BiDAFChar, QANet
 from os.path import join
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -40,11 +40,27 @@ def main(args):
     # Get embeddings
     log.info('Loading embeddings...')
     word_vectors = util.torch_from_json(args.word_emb_file)
-
+    char_vec = util.torch_from_json(args.char_emb_file)
     # Get model
     log.info('Building model...')
-    model = BiDAF(word_vectors=word_vectors,
-                  hidden_size=args.hidden_size)
+    if args.name == 'baseline':
+        model = BiDAF(word_vectors=word_vectors,
+                    hidden_size=args.hidden_size,
+                    drop_prob=args.drop_prob)
+    elif args.name == 'charembeddings':
+        model = BiDAFChar(word_vectors=word_vectors,
+                    char_vec = char_vec,
+                    word_len = 16,
+                    hidden_size=args.hidden_size,
+                    drop_prob=args.drop_prob)
+    elif args.name == 'qanet':
+        model = QANet(word_vectors=word_vectors,
+                      char_vec=char_vec,
+                      word_len= 16,
+                      emb_size = args.hidden_size,
+                      drop_prob=args.drop_prob)
+    else:
+        raise ValueError('Wrong model name')
     model = nn.DataParallel(model, gpu_ids)
     log.info(f'Loading checkpoint from {args.load_path}...')
     model = util.load_model(model, args.load_path, gpu_ids, return_step=False)
@@ -78,7 +94,7 @@ def main(args):
             batch_size = cw_idxs.size(0)
 
             # Forward
-            log_p1, log_p2 = model(cw_idxs, qw_idxs)
+            log_p1, log_p2 = model(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
             y1, y2 = y1.to(device), y2.to(device)
             loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
             nll_meter.update(loss.item(), batch_size)
