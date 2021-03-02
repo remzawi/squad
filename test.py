@@ -45,20 +45,17 @@ def main(args):
     log.info('Building model...')
     if args.name == 'baseline':
         model = BiDAF(word_vectors=word_vectors,
-                    hidden_size=args.hidden_size,
-                    drop_prob=args.drop_prob)
+                    hidden_size=args.hidden_size)
     elif args.name == 'charembeddings':
         model = BiDAFChar(word_vectors=word_vectors,
                     char_vec = char_vec,
                     word_len = 16,
-                    hidden_size=args.hidden_size,
-                    drop_prob=args.drop_prob)
+                    hidden_size=args.hidden_size)
     elif args.name == 'qanet':
         model = QANet(word_vectors=word_vectors,
                       char_vec=char_vec,
                       word_len= 16,
-                      emb_size = args.hidden_size,
-                      drop_prob=args.drop_prob)
+                      emb_size = args.hidden_size)
     else:
         raise ValueError('Wrong model name')
     model = nn.DataParallel(model, gpu_ids)
