@@ -282,43 +282,10 @@ class BiDAFOutput(nn.Module):
         return log_p1, log_p2
     
     
-    
-class CharEmbeddingDW(nn.Module):
-    """Embedding layer used by BiDAF, without the character-level component.
-
-    Word-level embeddings are further refined using a 2-layer Highway Encoder
-    (see `HighwayEncoder` class for details).
-
-    Args:
-        char_vec (torch.Tensor): charracted embedingd file.
-        word_len (torch.Tensor): Max word len
-        drop_prob (float): Probability of zero-ing out activations
-    """
-    def __init__(self, char_vec, word_len, hidden_size, drop_prob):
-        super(CharEmbeddingDW, self).__init__()
-        self.drop = nn.Dropout(drop_prob)
-        self.embed = nn.Embedding.from_pretrained(char_vec, freeze=False)
-        nn.init.uniform_(self.embed.weight, -0.001, 0.001)
-        self.char_cnn = DWConv(word_len, hidden_size, 5, False)
-        self.hidden_size=hidden_size
-        
-
-    def forward(self, x):
-        B, S, W = x.size()
-        emb = self.embed(x)   # (batch_size, seq_len, word_len, embed_size)
-        emb = self.drop(emb)
-        emb = self.char_cnn(emb.view(B*S, W, -1)).view(B,S,self.hidden_size,-1) # (batch_size , seq_len, hidden_size, conv_size)
-        emb = F.relu(emb)
-        emb = torch.max(emb, -1)[0] # (batch_size, seq_len, hidden_size)
-
-        return emb
-    
-    
 class PositionalEncoding(nn.Module):
     """
     Implements a non-trainable positional encoder based on sin and cos functions
-    Based on the implementation originaly proposed
-    Adapted to Pytorch based on https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+    Based on the implementation originaly proposed in Attention is All You Need
     Input size: (batch_size, seq_len, hidden_size)
     """
     def __init__(self, hidden_size, drop_prob=0, para_limit=1000, scale=False):
@@ -330,7 +297,6 @@ class PositionalEncoding(nn.Module):
         pe[:, 0::2] = torch.sin(position * div_term) 
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0) #(1,max_len,hidden_size)
-        #pe = pe.unsqueeze(0).transpose(0, 1) #(max_len, hidden_size)->(1,max_len,hidden_size)->(max_len,1,hidden_size)
         self.register_buffer('pe', pe)
         if scale:
             self.scale_fact = hidden_size ** 0.5
@@ -339,34 +305,16 @@ class PositionalEncoding(nn.Module):
         
 
     def forward(self, x):
-        x = x*self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]
+        x = x * self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]
         x = self.drop(x)
         return x
-    
-class PositionalEncoding2(nn.Module):
-    """
-    Implements a non-trainable positional encoder based on sin and cos functions
-    Based on the implementation originaly proposed
-    Adapted to Pytorch based on https://pytorch.org/tutorials/beginner/transformer_tutorial.html
-    """
-    def __init__(self, hidden_size, drop_prob):
-        super(PositionalEncoding2, self).__init__()
-        self.drop = nn.Dropout(drop_prob)
-        self.hidden_size = hidden_size
 
-    def forward(self, x, para_limit):
-        pe = torch.zeros(para_limit, self.hidden_size)
-        position = torch.arange(0, para_limit, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, self.hidden_size, 2).float() * (-math.log(10000.0) / self.hidden_size))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0, 1)
-        x = x + pe[:x.size(0), :]
-        x = self.drop(x)
-        return x
     
     
 class DWConv(nn.Module):
+    """
+    Depthwise separable 1d convolution
+    """
     def __init__(self, nin, nout, kernel_size, bias = True, act = True):
         super(DWConv, self).__init__()
         self.depthwise = nn.Conv1d(nin, nin, kernel_size=kernel_size, padding=kernel_size//2, groups=nin,bias=bias)
@@ -405,7 +353,6 @@ class SelfAttention(nn.Module):
         self.value = nn.Linear(hidden_size, hidden_size)
         # regularization
         self.attn_drop = nn.Dropout(drop_prob)
-        #self.resid_drop = nn.Dropout(drop_prob)
         # output projection
         self.proj = nn.Linear(hidden_size, hidden_size)
         # causal mask to ensure that attention is only applied to the left in the input sequence
@@ -430,14 +377,15 @@ class SelfAttention(nn.Module):
         att = self.attn_drop(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
-        y = self.proj(y)
+
         # output projection
-        #y = self.resid_drop(self.proj(y))
+        y = self.proj(y)
         return y
     
 class SelfAttention2(nn.Module):
     """
-    Self attention adapted from https://github.com/yizhongw/allennlp/blob/master/allennlp/modules/seq2seq_encoders/multi_head_self_attention.py
+    Self attention adapted and modified from https://github.com/yizhongw/allennlp/blob/master/allennlp/modules/seq2seq_encoders/multi_head_self_attention.py
+    More memory efficient
     """
     def __init__(self,
                  hidden_size,
@@ -533,20 +481,6 @@ class SelfAttentionBlock(nn.Module):
         att = self.att(norm,  mask=mask)
         return x+self.drop(att)
     
-class TorchAttentionBlock(nn.Module):
-    def __init__(self, hidden_size, n_head, drop_prob, att_drop_prob = None):
-        super(TorchAttentionBlock, self).__init__()
-        if att_drop_prob is None:
-            att_drop_prob = drop_prob
-        self.att = SelfAttention(hidden_size, n_head, att_drop_prob)
-        self.att = nn.MultiheadAttention(hidden_size, n_head, drop_prob)
-        self.norm = nn.LayerNorm(hidden_size)
-        self.drop = nn.Dropout(drop_prob)
-        
-    def forward(self, x, mask = None):
-        norm = self.norm(x)
-        att = self.att(norm, norm, norm, key_padding_mask=mask)
-        return self.drop(x+att)
     
 class FeedForwardBlock(nn.Module):
     def __init__(self, hidden_size, drop_prob):
@@ -569,6 +503,10 @@ class Resizer(nn.Module):
         return self.drop(out)
     
 class EncoderBlock(nn.Module):
+    """
+    Encoder block for QANet
+    Support stochastic depth (set final_prob to less than 1, in th epaper they use 0.9)
+    """
     def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
         super(EncoderBlock, self).__init__()
         self.pos = PositionalEncoding(enc_size, 0, para_limit, False)
@@ -586,19 +524,14 @@ class EncoderBlock(nn.Module):
         if self.do_depth:
             for i, conv in enumerate(self.convs):
                 out = self.drop_layer(out, conv, 1 - (i+init_drop)/total_layers*(1-self.final_prob))
-            #out = self.convs(out)
             out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask)
             out = self.drop_layer(out, self.ff, 1 - (init_drop + self.n_layers - 1)/total_layers*(1-self.final_prob))
             return out
         else:
             for i, conv in enumerate(self.convs):
                 out = conv(out)
-
-            #out = self.convs(out)
             out = self.att(out, mask)
             out = self.ff(out)
-            #out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
-            #out = self.drop_layer(out, self.ff, self.final_prob)
             return out
             
     def drop_layer(self, x, layer, prob, mask = None):
@@ -617,54 +550,11 @@ class EncoderBlock(nn.Module):
                 return layer(x)
     
     
-class EncoderBlock2(nn.Module):
-    def __init__(self, enc_size,  n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
-        super(EncoderBlock2, self).__init__()
-        self.pos = PositionalEncoding2(enc_size, drop_prob)
-        self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob) for i in range(n_conv)])
-        self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob)
-        self.ff = FeedForwardBlock(enc_size, drop_prob)
-        self.n_layers = n_conv + 2
-        self.final_prob = final_prob
-        self.drop = nn.Dropout(drop_prob)
-        self.do_depth = final_prob < 1
-    def forward(self, x, para_limit, mask = None, init_drop =1, total_layers=None):
-        out = self.pos(x, para_limit) 
-        if self.do_depth:
-            for i, conv in enumerate(self.convs):
-                out = self.drop_layer(out, conv, 1 - (i+init_drop)/total_layers*(1-self.final_prob))
-            #out = self.convs(out)
-            out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask)
-            out = self.drop_layer(out, self.ff, 1 - (init_drop + self.n_layers - 1)/total_layers*(1-self.final_prob))
-            return out
-        else:
-            for i, conv in enumerate(self.convs):
-                out = conv(out)
-
-            #out = self.convs(out)
-            out = self.att(out, mask)
-            out = self.ff(out)
-            #out = self.drop_layer(out, self.att, 1 - (self.n_layers - 1)/self.n_layers*(1-self.final_prob))
-            #out = self.drop_layer(out, self.ff, self.final_prob)
-            return out
-            
-    def drop_layer(self, x, layer, prob, mask = None):
-        if self.training:
-            if torch.rand(1) < prob:
-                if mask is not None:
-                    return layer(x, mask)
-                else:
-                    return layer(x)
-            else:
-                return x
-        else:
-            if mask is not None:
-                return layer(x, mask)
-            else:
-                return layer(x)            
-    
-    
 class StackedEncoderBlocks(nn.Module):
+    """
+    Stack multiple encoer blocks
+    Applies the stochastic depth along the entire set of blocks
+    """
     def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
         super(StackedEncoderBlocks, self).__init__()
         self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob=final_prob)
@@ -681,6 +571,9 @@ class StackedEncoderBlocks(nn.Module):
 
 
 class OutputBlock(nn.Module):
+    """
+    One output block for QANet (for either start or end position)
+    """
     def __init__(self, hidden_size):
         super(OutputBlock, self).__init__() 
         self.proj = nn.Linear(2 * hidden_size, 1, bias=False)
