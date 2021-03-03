@@ -138,14 +138,14 @@ class BiDAFChar(nn.Module):
 
 
 class QANet(nn.Module):
-    def __init__(self, word_vectors, char_vec, word_len,  emb_size, enc_size=104, drop_prob=0.1, c_lim = 400, q_lim = 50):
+    def __init__(self, word_vectors, char_vec, word_len,  emb_size, enc_size=96, drop_prob=0.1, c_lim = 400, q_lim = 50):
         super(QANet, self).__init__()
         self.emb = layers.EmbeddingWithChar(word_vectors=word_vectors,
                                     hidden_size=emb_size,
                                     char_vec = char_vec,
                                     word_len = word_len,
                                     drop_prob = drop_prob,
-                                    char_prop=0.4)
+                                    char_prop=0.3)
         
         self.emb_resize = layers.Resizer(input_size=emb_size,
                                          output_size=enc_size,
@@ -157,7 +157,7 @@ class QANet(nn.Module):
                                            n_conv=4,
                                            kernel_size=7,
                                            drop_prob=drop_prob,
-                                           n_head=4,
+                                           n_head=2,
                                            att_drop_prob=drop_prob,
                                            final_prob=0.9)
         
@@ -175,7 +175,7 @@ class QANet(nn.Module):
                                                      n_conv=2,
                                                      kernel_size=5,
                                                      drop_prob=drop_prob,
-                                                     n_head=4,
+                                                     n_head=2,
                                                      att_drop_prob=drop_prob,
                                                      final_prob=0.9)
         
