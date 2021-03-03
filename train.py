@@ -142,7 +142,6 @@ def main(args):
                 loss_val = loss.item()
                 if args.grad_accumulation:
                     loss /= 2
-                loss_val = loss.item()
 
                 # Backward
                 if args.grad_accumulation:
