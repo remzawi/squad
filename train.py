@@ -64,7 +64,9 @@ def main(args):
                       char_vec=char_vec,
                       word_len= 16,
                       emb_size = args.hidden_size,
-                      drop_prob=args.drop_prob)
+                      drop_prob=args.drop_prob,
+                      enc_size=args.enc_size,
+                      n_head=args.n_head)
     else:
         raise ValueError('Wrong model name')
         
@@ -120,6 +122,7 @@ def main(args):
     log.info('Training...')
     steps_till_eval = args.eval_steps
     epoch = step // len(train_dataset)
+    i=0
     while epoch != args.num_epochs:
         epoch += 1
         log.info(f'Starting epoch {epoch}...')
@@ -130,20 +133,34 @@ def main(args):
                 cw_idxs = cw_idxs.to(device)
                 qw_idxs = qw_idxs.to(device)
                 batch_size = cw_idxs.size(0)
-                optimizer.zero_grad()
+                
 
                 # Forward
                 log_p1, log_p2 = model(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
                 y1, y2 = y1.to(device), y2.to(device)
                 loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
+                if args.grad_accumulation:
+                    loss /= 2
                 loss_val = loss.item()
 
                 # Backward
-                loss.backward()
-                nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                optimizer.step()
-                scheduler.step(step // batch_size)
-                ema(model, step // batch_size)
+                if args.grad_accumulation:
+                    loss.backward()
+                    i+=1
+                    if i % 2 == 0:
+                        
+                        nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                        optimizer.step()
+                        scheduler.step(step // (2*batch_size))
+                        ema(model, step // (2*batch_size))
+                        optimizer.zero_grad()
+                else:    
+                    loss.backward()
+                    nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                    optimizer.step()
+                    scheduler.step(step // batch_size)
+                    ema(model, step // batch_size)
+                    optimizer.zero_grad()
 
                 # Log info
                 step += batch_size

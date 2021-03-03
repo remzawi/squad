@@ -55,7 +55,9 @@ def main(args):
         model = QANet(word_vectors=word_vectors,
                       char_vec=char_vec,
                       word_len= 16,
-                      emb_size = args.hidden_size)
+                      emb_size = args.hidden_size,
+                      enc_size=args.enc_size,
+                      n_head=args.n_head)
     else:
         raise ValueError('Wrong model name')
     model = nn.DataParallel(model, gpu_ids)
