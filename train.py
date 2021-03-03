@@ -97,7 +97,7 @@ def main(args):
                                betas=(0.8, 0.999),
                                weight_decay=3*1e-7,
                                eps=1e-7)
-        scheduler = warmup(optimizer, 1, 2000)
+        scheduler = warmup(optimizer, 1, 1000)
     else:
         optimizer = optim.Adadelta(model.parameters(), args.lr,
                                    weight_decay=3*1e-7)
@@ -139,6 +139,7 @@ def main(args):
                 log_p1, log_p2 = model(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
                 y1, y2 = y1.to(device), y2.to(device)
                 loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
+                loss_val = loss.item()
                 if args.grad_accumulation:
                     loss /= 2
                 loss_val = loss.item()
