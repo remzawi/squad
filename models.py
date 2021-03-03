@@ -145,12 +145,13 @@ class QANet(nn.Module):
                                     char_vec = char_vec,
                                     word_len = word_len,
                                     drop_prob = drop_prob,
-                                    char_prop=0.3)
+                                    char_prop=0.3,
+                                    hwy_drop=drop_prob)
         
         self.emb_resize = layers.Resizer(input_size=emb_size,
                                          output_size=enc_size,
                                          kernel_size=7,
-                                         drop_prob=0)
+                                         drop_prob=drop_prob)
         
         self.emb_enc = layers.EncoderBlock(enc_size=enc_size,
                                            para_limit=1000,
@@ -167,7 +168,7 @@ class QANet(nn.Module):
         self.att_resize = layers.Resizer(input_size=4*enc_size,
                                          output_size=enc_size,
                                          kernel_size=5,
-                                         drop_prob=0)
+                                         drop_prob=drop_prob)
         
         self.model_enc = layers.StackedEncoderBlocks(n_blocks=7,
                                                      hidden_size=enc_size,
@@ -182,6 +183,8 @@ class QANet(nn.Module):
         self.out_beg = layers.OutputBlock(enc_size)
         
         self.out_end = layers.OutputBlock(enc_size)
+        
+        self.drop = nn.Dropout(drop_prob)
 
         
         
@@ -204,9 +207,9 @@ class QANet(nn.Module):
         
         att_res = self.att_resize(att)  # (batch_size, c_len, enc_size)
         
-        out1 = self.model_enc(att_res, c_mask)  # (batch_size, c_len, enc_size)
-        out2 = self.model_enc(out1, c_mask) # (batch_size, c_len, enc_size)
-        out3 = self.model_enc(out2, c_mask) # (batch_size, c_len, enc_size)
+        out1 = self.model_enc(self.drop(att_res), c_mask)  # (batch_size, c_len, enc_size)
+        out2 = self.model_enc(self.drop(out1), c_mask) # (batch_size, c_len, enc_size)
+        out3 = self.model_enc(self.drop(out2), c_mask) # (batch_size, c_len, enc_size)
         
         log_p1 = self.out_beg(out1, out2, c_mask) # (batch_size, c_len)
         log_p2 = self.out_end(out1, out3, c_mask) # (batch_size, c_len)

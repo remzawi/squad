@@ -79,7 +79,7 @@ class EmbeddingWithChar(nn.Module):
         hidden_size (int): Size of hidden activations.
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, word_vectors, hidden_size, char_vec, word_len, drop_prob, char_prop=0.2):
+    def __init__(self, word_vectors, hidden_size, char_vec, word_len, drop_prob, char_prop=0.2, hwy_drop = 0):
         super(EmbeddingWithChar, self).__init__()
         self.drop = nn.Dropout(drop_prob)
         self.word_embed = nn.Embedding.from_pretrained(word_vectors)
@@ -87,7 +87,7 @@ class EmbeddingWithChar(nn.Module):
         word_size = hidden_size - char_size
         self.char_embed = CharEmbedding(char_vec, word_len, char_size, drop_prob = 0.05)
         self.proj = nn.Linear(word_vectors.size(1), word_size, bias=False)
-        self.hwy = HighwayEncoder(2, hidden_size)
+        self.hwy = HighwayEncoder(2, hidden_size, hwy_drop)
 
     def forward(self, x, char_x):
         word_emb = self.word_embed(x)   # (batch_size, seq_len, embed_size)
@@ -111,18 +111,20 @@ class HighwayEncoder(nn.Module):
         num_layers (int): Number of layers in the highway encoder.
         hidden_size (int): Size of hidden activations.
     """
-    def __init__(self, num_layers, hidden_size):
+    def __init__(self, num_layers, hidden_size, drop_prob = 0):
         super(HighwayEncoder, self).__init__()
         self.transforms = nn.ModuleList([nn.Linear(hidden_size, hidden_size)
                                          for _ in range(num_layers)])
         self.gates = nn.ModuleList([nn.Linear(hidden_size, hidden_size)
                                     for _ in range(num_layers)])
+        self.drop = nn.Dropout(drop_prob)
 
     def forward(self, x):
         for gate, transform in zip(self.gates, self.transforms):
             # Shapes of g, t, and x are all (batch_size, seq_len, hidden_size)
             g = torch.sigmoid(gate(x))
             t = F.relu(transform(x))
+            t = self.drop(t)
             x = g * t + (1 - g) * x
 
         return x
@@ -496,7 +498,7 @@ class FeedForwardBlock(nn.Module):
 class Resizer(nn.Module):
     def __init__(self, input_size, output_size, kernel_size, drop_prob= 0, bias=False, act = False):
         super(Resizer, self).__init__()
-        self.conv = DWConv(input_size, output_size, kernel_size,bias=bias,act=False)
+        self.conv = DWConv(input_size, output_size, kernel_size,bias=bias,act=act)
         self.drop = nn.Dropout(drop_prob)
     def forward(self, x):
         out = self.conv(x)

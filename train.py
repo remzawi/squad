@@ -140,26 +140,16 @@ def main(args):
                 y1, y2 = y1.to(device), y2.to(device)
                 loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
                 loss_val = loss.item()
-                if args.grad_accumulation:
-                    loss /= 2
+                i+=1
+                loss/=args.acc_step
 
                 # Backward
-                if args.grad_accumulation:
-                    loss.backward()
-                    i+=1
-                    if i % 2 == 0:
-                        
-                        nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                        optimizer.step()
-                        scheduler.step(step // (2*batch_size))
-                        ema(model, step // (2*batch_size))
-                        optimizer.zero_grad()
-                else:    
-                    loss.backward()
+                loss.backward()
+                if i%args.acc_step == 0:
                     nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                     optimizer.step()
-                    scheduler.step(step // batch_size)
-                    ema(model, step // batch_size)
+                    scheduler.step(step // (args.acc_step*batch_size))
+                    ema(model, step // (args.acc_step*batch_size))
                     optimizer.zero_grad()
 
                 # Log info
@@ -173,7 +163,7 @@ def main(args):
                                step)
 
                 steps_till_eval -= batch_size
-                if steps_till_eval <= 0 and i%2 == 1:
+                if steps_till_eval <= 0 and i%args.acc_step == 0:
                     steps_till_eval = args.eval_steps
 
                     # Evaluate and save checkpoint
@@ -221,6 +211,7 @@ def evaluate(model, data_loader, device, eval_file, max_len, use_squad_v2):
             log_p1, log_p2 = model(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
             y1, y2 = y1.to(device), y2.to(device)
             loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
+            
             nll_meter.update(loss.item(), batch_size)
 
             # Get F1 and EM scores

@@ -134,9 +134,9 @@ def get_train_args():
                         type=float,
                         default=0.999,
                         help='Decay rate for exponential moving average of parameters.')
-    parser.add_argument('--grad_accumulation',
+    parser.add_argument('--acc_step',
                         type=bool,
-                        default=False,
+                        default=1,
                         help='Whether to perform gradient acucmulation')
 
     args = parser.parse_args()
