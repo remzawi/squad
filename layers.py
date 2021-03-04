@@ -54,7 +54,7 @@ class CharEmbedding(nn.Module):
         super(CharEmbedding, self).__init__()
         self.drop = nn.Dropout(drop_prob)
         self.embed = nn.Embedding.from_pretrained(char_vec, freeze=False)
-        #nn.init.uniform_(self.embed.weight, -0.001, 0.001)
+        nn.init.uniform_(self.embed.weight, -0.001, 0.001)
         self.char_cnn = nn.Conv2d(word_len, hidden_size, (1, 5))
         
 
