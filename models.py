@@ -146,7 +146,8 @@ class QANet(nn.Module):
                                     word_len = word_len,
                                     drop_prob = drop_prob,
                                     char_prop=0.4,
-                                    hwy_drop=drop_prob)
+                                    hwy_drop=drop_prob,
+                                    char_dim=200)
         
         self.emb_resize = layers.Resizer(input_size=emb_size,
                                          output_size=enc_size,
@@ -207,7 +208,7 @@ class QANet(nn.Module):
         
         att_res = self.att_resize(att)  # (batch_size, c_len, enc_size)
         
-        out1 = self.model_enc(self.drop(att_res), c_mask)  # (batch_size, c_len, enc_size)
+        out1 = self.model_enc(att_res, c_mask)  # (batch_size, c_len, enc_size)
         out2 = self.model_enc(out1, c_mask) # (batch_size, c_len, enc_size)
         out3 = self.model_enc(out2, c_mask) # (batch_size, c_len, enc_size)
         

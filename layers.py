@@ -50,11 +50,14 @@ class CharEmbedding(nn.Module):
         word_len (torch.Tensor): Max word len
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, char_vec, word_len, hidden_size, drop_prob):
+    def __init__(self, char_vec, word_len, hidden_size, drop_prob, char_dim = None):
         super(CharEmbedding, self).__init__()
         self.drop = nn.Dropout(drop_prob)
-        self.embed = nn.Embedding.from_pretrained(char_vec, freeze=False)
-        nn.init.uniform_(self.embed.weight, -0.001, 0.001)
+        if char_dim is None:
+            self.embed = nn.Embedding.from_pretrained(char_vec, freeze=False)
+        else:
+            self.embed == nn.Embedding(char_vec.size(0), char_dim)
+        nn.init.uniform_(self.embed.weight, -0.01, 0.01)
         self.char_cnn = nn.Conv2d(word_len, hidden_size, (1, 5))
         
 
@@ -79,13 +82,13 @@ class EmbeddingWithChar(nn.Module):
         hidden_size (int): Size of hidden activations.
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, word_vectors, hidden_size, char_vec, word_len, drop_prob, char_prop=0.2, hwy_drop = 0):
+    def __init__(self, word_vectors, hidden_size, char_vec, word_len, drop_prob, char_prop=0.2, hwy_drop = 0, char_dim = None):
         super(EmbeddingWithChar, self).__init__()
         self.drop = nn.Dropout(drop_prob)
         self.word_embed = nn.Embedding.from_pretrained(word_vectors)
         char_size = int(hidden_size*char_prop)
         word_size = hidden_size - char_size
-        self.char_embed = CharEmbedding(char_vec, word_len, char_size, drop_prob = 0.05)
+        self.char_embed = CharEmbedding(char_vec, word_len, char_size, drop_prob = 0.05, char_dim=char_dim)
         self.proj = nn.Linear(word_vectors.size(1), word_size, bias=False)
         self.hwy = HighwayEncoder(2, hidden_size, hwy_drop)
 
@@ -340,7 +343,7 @@ class ConvBlock(nn.Module):
     def forward(self, x):
         norm = self.norm(x)
         conv = self.conv(norm)
-        return self.drop(x + conv)
+        return x + self.drop(conv)
     
 class SelfAttention(nn.Module):
     """
