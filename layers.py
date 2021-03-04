@@ -56,7 +56,7 @@ class CharEmbedding(nn.Module):
         if char_dim is None:
             self.embed = nn.Embedding.from_pretrained(char_vec, freeze=False)
         else:
-            self.embed == nn.Embedding(char_vec.size(0), char_dim)
+            self.embed = nn.Embedding(char_vec.size(0), char_dim)
         nn.init.uniform_(self.embed.weight, -0.01, 0.01)
         self.char_cnn = nn.Conv2d(word_len, hidden_size, (1, 5))
         
