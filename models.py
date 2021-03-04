@@ -145,7 +145,7 @@ class QANet(nn.Module):
                                     char_vec = char_vec,
                                     word_len = word_len,
                                     drop_prob = drop_prob,
-                                    char_prop=0.3,
+                                    char_prop=0.4,
                                     hwy_drop=drop_prob)
         
         self.emb_resize = layers.Resizer(input_size=emb_size,
