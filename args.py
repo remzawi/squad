@@ -135,7 +135,7 @@ def get_train_args():
                         default=0.999,
                         help='Decay rate for exponential moving average of parameters.')
     parser.add_argument('--acc_step',
-                        type=bool,
+                        type=int,
                         default=1,
                         help='Whether to perform gradient acucmulation')
 
@@ -247,10 +247,10 @@ def add_train_test_args(parser):
                         default=None,
                         help='Path to load as a model checkpoint.')
     parser.add_argument('--n_head',
-                        type=float,
+                        type=int,
                         default=2,
                         help='Number of heads for self-attention in QANet')
     parser.add_argument('--enc_size',
-                        type=float,
+                        type=int,
                         default=96,
                         help='Encoding size for QANet')
