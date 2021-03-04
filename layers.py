@@ -399,7 +399,7 @@ class SelfAttention2(nn.Module):
         self.hidden_size = hidden_size
         assert hidden_size%n_head == 0
 
-        self.comb_proj = nn.Linear(hidden_size, 3 * hidden_size)
+        self.comb_proj = nn.Linear(hidden_size, 3 * hidden_size, bias = False)
 
         self.scale = (hidden_size // n_head) ** 0.5
         self.out_proj = nn.Linear(hidden_size, hidden_size)

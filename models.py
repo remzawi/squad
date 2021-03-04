@@ -151,7 +151,7 @@ class QANet(nn.Module):
         self.emb_resize = layers.Resizer(input_size=emb_size,
                                          output_size=enc_size,
                                          kernel_size=7,
-                                         drop_prob=drop_prob)
+                                         drop_prob=0)
         
         self.emb_enc = layers.EncoderBlock(enc_size=enc_size,
                                            para_limit=1000,
@@ -163,12 +163,12 @@ class QANet(nn.Module):
                                            final_prob=0.9)
         
         self.att = layers.BiDAFAttention(hidden_size=enc_size,
-                                         drop_prob=drop_prob)
+                                         drop_prob=0)
         
         self.att_resize = layers.Resizer(input_size=4*enc_size,
                                          output_size=enc_size,
                                          kernel_size=5,
-                                         drop_prob=drop_prob)
+                                         drop_prob=0)
         
         self.model_enc = layers.StackedEncoderBlocks(n_blocks=7,
                                                      hidden_size=enc_size,
@@ -208,8 +208,8 @@ class QANet(nn.Module):
         att_res = self.att_resize(att)  # (batch_size, c_len, enc_size)
         
         out1 = self.model_enc(self.drop(att_res), c_mask)  # (batch_size, c_len, enc_size)
-        out2 = self.model_enc(self.drop(out1), c_mask) # (batch_size, c_len, enc_size)
-        out3 = self.model_enc(self.drop(out2), c_mask) # (batch_size, c_len, enc_size)
+        out2 = self.model_enc(out1, c_mask) # (batch_size, c_len, enc_size)
+        out3 = self.model_enc(out2, c_mask) # (batch_size, c_len, enc_size)
         
         log_p1 = self.out_beg(out1, out2, c_mask) # (batch_size, c_len)
         log_p2 = self.out_end(out1, out3, c_mask) # (batch_size, c_len)
