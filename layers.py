@@ -335,15 +335,19 @@ class DWConv(nn.Module):
         return out
     
 class ConvBlock(nn.Module):
-    def __init__(self, input_size, hidden_size, kernel_size, drop_prob):
+    def __init__(self, input_size, hidden_size, kernel_size, drop_prob, LN_train=True, DP_residual=False):
         super(ConvBlock, self).__init__()
         self.conv = DWConv(input_size, hidden_size, kernel_size)
         self.drop = nn.Dropout(drop_prob)
-        self.norm = nn.LayerNorm(input_size)
+        self.norm = nn.LayerNorm(input_size, elementwise_affine=LN_train)
+        self.DP_residual=DP_residual
     def forward(self, x):
         norm = self.norm(x)
         conv = self.conv(norm)
-        return x + self.drop(conv)
+        if self.DP_residual:
+            return self.drop(x+conv)
+        else:
+            return x + self.drop(conv)
     
 class SelfAttention(nn.Module):
     """
@@ -473,30 +477,38 @@ class SelfAttention2(nn.Module):
     
     
 class SelfAttentionBlock(nn.Module):
-    def __init__(self, hidden_size, n_head, drop_prob, att_drop_prob = None):
+    def __init__(self, hidden_size, n_head, drop_prob, att_drop_prob = None, LN_train=True, DP_residual=False):
         super(SelfAttentionBlock, self).__init__()
         if att_drop_prob is None:
             att_drop_prob = drop_prob
         self.att = SelfAttention2(hidden_size, n_head, att_drop_prob)
-        self.norm = nn.LayerNorm(hidden_size)
+        self.norm = nn.LayerNorm(hidden_size, elementwise_affine=LN_train)
         self.drop = nn.Dropout(drop_prob)
+        self.DP_residual=DP_residual
         
     def forward(self, x, mask = None):
         norm = self.norm(x)
         att = self.att(norm,  mask=mask)
-        return x+self.drop(att)
+        if self.DP_residual:
+            return self.drop(x+att)
+        else:
+            return x+self.drop(att)
     
     
 class FeedForwardBlock(nn.Module):
-    def __init__(self, hidden_size, drop_prob):
+    def __init__(self, hidden_size, drop_prob, LN_train=True, DP_residual=False):
         super(FeedForwardBlock, self).__init__()
         self.proj = nn.Linear(hidden_size, hidden_size)
-        self.norm = nn.LayerNorm(hidden_size)
+        self.norm = nn.LayerNorm(hidden_size,elementwise_affine=LN_train)
         self.drop = nn.Dropout(drop_prob)
+        self.DP_residual=DP_residual
     def forward(self, x):
         norm = self.norm(x)
         proj = F.relu(self.proj(norm))
-        return x + self.drop(proj)
+        if self.DP_residual:
+            return self.drop(x+proj)
+        else:
+            return x + self.drop(proj)
     
 class Resizer(nn.Module):
     def __init__(self, input_size, output_size, kernel_size, drop_prob= 0, bias=False, act = False):
@@ -512,12 +524,12 @@ class EncoderBlock(nn.Module):
     Encoder block for QANet
     Support stochastic depth (set final_prob to less than 1, in th epaper they use 0.9)
     """
-    def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
+    def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9, LN_train=True, DP_residual=False):
         super(EncoderBlock, self).__init__()
         self.pos = PositionalEncoding(enc_size, 0, para_limit, False)
-        self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob) for i in range(n_conv)])
-        self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob)
-        self.ff = FeedForwardBlock(enc_size, drop_prob)
+        self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob, LN_train, DP_residual) for i in range(n_conv)])
+        self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob, LN_train, DP_residual)
+        self.ff = FeedForwardBlock(enc_size, drop_prob, LN_train, DP_residual)
         self.n_layers = n_conv + 2
         self.final_prob = final_prob
         self.drop = nn.Dropout(drop_prob)
@@ -560,9 +572,9 @@ class StackedEncoderBlocks(nn.Module):
     Stack multiple encoer blocks
     Applies the stochastic depth along the entire set of blocks
     """
-    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9):
+    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9,, LN_train = True, DP_residual=False):
         super(StackedEncoderBlocks, self).__init__()
-        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob=final_prob)
+        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob=final_prob, LN_train, DP_residual)
                                        for i in range(n_blocks)])
         self.total_layers = (n_conv + 2) * n_blocks
         self.layer_per_block = n_conv + 2

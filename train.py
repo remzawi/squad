@@ -66,7 +66,9 @@ def main(args):
                       emb_size = args.hidden_size,
                       drop_prob=args.drop_prob,
                       enc_size=args.enc_size,
-                      n_head=args.n_head)
+                      n_head=args.n_head,
+                      LN_train=args.ln_train,
+                      DP_residual=args.dp_res)
     else:
         raise ValueError('Wrong model name')
         
@@ -95,16 +97,16 @@ def main(args):
         #                       eps=1e-7)
         if args.grad_cent:
             optimizer = AdamWGC(model.parameters(), args.lr,
-                                betas=(0.8, 0.999),
+                                betas=(0.9, 0.999),
                                 weight_decay=3*1e-7,
                                 eps=1e-7,
                                 use_gc=True)
         else:    
             optimizer = AdamW(model.parameters(), args.lr,
-                                betas=(0.8, 0.999),
+                                betas=(0.9, 0.999),
                                 weight_decay=3*1e-7,
                                 eps=1e-7)
-        scheduler = warmup(optimizer, 1, 1000)
+        scheduler = warmup(optimizer, 1, 4000)
     else:
         optimizer = optim.Adadelta(model.parameters(), args.lr,
                                    weight_decay=3*1e-7)

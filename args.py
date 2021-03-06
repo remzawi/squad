@@ -142,6 +142,14 @@ def get_train_args():
                         type=bool,
                         default=False,
                         help='Whether to perform gradient centralization')
+    parser.add_argument('--ln_train',
+                        type=bool,
+                        default=True,
+                        help='Whether to train layernorm')
+    parser.add_argument('--dp_res',
+                        type=bool,
+                        default=False,
+                        help='Whether to include residuals in dropout')
 
     args = parser.parse_args()
 
