@@ -133,7 +133,7 @@ class AdamWGC(torch.optim.Optimizer):
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
         defaults = dict(lr=lr, betas=betas, eps=eps,
                         weight_decay=weight_decay, amsgrad=amsgrad)
-        super(AdamW, self).__init__(params, defaults)
+        super(AdamWGC, self).__init__(params, defaults)
         self.gc_loc=gc_loc
         self.use_gc=use_gc
         self.gc_conv_only=gc_conv_only
