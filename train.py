@@ -13,7 +13,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as sched
 import torch.utils.data as data
 import util
-from adamW import AdamW
+from adamW import AdamW, AdamWGC
 
 from args import get_train_args
 from collections import OrderedDict
@@ -93,10 +93,17 @@ def main(args):
         #                       betas=(0.8, 0.999),
         #                       weight_decay=3*1e-7,
         #                       eps=1e-7)
-        optimizer = AdamW(model.parameters(), args.lr,
-                               betas=(0.8, 0.999),
-                               weight_decay=3*1e-7,
-                               eps=1e-7)
+        if args.grad_cent:
+            optimizer = AdamWGC(model.parameters(), args.lr,
+                                betas=(0.8, 0.999),
+                                weight_decay=3*1e-7,
+                                eps=1e-7,
+                                use_gc=True)
+        else:    
+            optimizer = AdamW(model.parameters(), args.lr,
+                                betas=(0.8, 0.999),
+                                weight_decay=3*1e-7,
+                                eps=1e-7)
         scheduler = warmup(optimizer, 1, 1000)
     else:
         optimizer = optim.Adadelta(model.parameters(), args.lr,

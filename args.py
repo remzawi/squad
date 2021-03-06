@@ -138,6 +138,10 @@ def get_train_args():
                         type=int,
                         default=1,
                         help='Whether to perform gradient acucmulation')
+    parser.add_argument('--grad_cent',
+                        type=bool,
+                        default=False,
+                        help='Whether to perform gradient centralization')
 
     args = parser.parse_args()
 
