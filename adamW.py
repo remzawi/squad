@@ -139,7 +139,7 @@ class AdamWGC(torch.optim.Optimizer):
         self.gc_conv_only=gc_conv_only
         
     def __setstate__(self, state):
-        super(AdamW, self).__setstate__(state)
+        super(AdamWGC, self).__setstate__(state)
         for group in self.param_groups:
             group.setdefault('amsgrad', False)
 
