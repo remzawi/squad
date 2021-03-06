@@ -572,9 +572,9 @@ class StackedEncoderBlocks(nn.Module):
     Stack multiple encoer blocks
     Applies the stochastic depth along the entire set of blocks
     """
-    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9,, LN_train = True, DP_residual=False):
+    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9, LN_train = True, DP_residual=False):
         super(StackedEncoderBlocks, self).__init__()
-        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob=final_prob, LN_train, DP_residual)
+        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob=final_prob, LN_train=LN_train, DP_residual=DP_residual)
                                        for i in range(n_blocks)])
         self.total_layers = (n_conv + 2) * n_blocks
         self.layer_per_block = n_conv + 2
