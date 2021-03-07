@@ -311,7 +311,7 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x, mask=None):
         if mask is not None:
-            x = x * self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]*mask.unsqueeze(2)
+            x = x * self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]*mask.unsqueeze(2).type(torch.float32)
         else:
             x = x * self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]
         x = self.drop(x)
