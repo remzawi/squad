@@ -71,7 +71,8 @@ def main(args):
                       DP_residual=args.dp_res,
                       mask_pos=args.mask_pos,
                       two_pos=args.two_pos,
-                      total_prob=args.total_drop)
+                      total_prob=args.total_drop,
+                      final_prob=args.final_prob)
     else:
         raise ValueError('Wrong model name')
         
