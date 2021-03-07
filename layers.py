@@ -611,8 +611,9 @@ class EncoderBlock(nn.Module):
             for i, conv in enumerate(self.convs):
                 out = self.drop_layer(out, conv, 1 - (i+init_drop)/total_layers*(1-self.final_prob))
             if self.two_pos:
-                out = self.pos(out,mask)
-            out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask)
+                out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask, self.pos)
+            else:
+                out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask)
             out = self.drop_layer(out, self.ff, 1 - (init_drop + self.n_layers - 1)/total_layers*(1-self.final_prob))
             return out
         else:
@@ -624,19 +625,30 @@ class EncoderBlock(nn.Module):
             out = self.ff(out)
             return out
             
-    def drop_layer(self, x, layer, prob, mask = None):
+    def drop_layer(self, x, layer, prob, mask = None, pos=None):
         if self.training:
             if torch.rand(1) < prob:
                 if mask is not None:
-                    return layer(x, mask)
+                    if pos is not None:
+                        return layer(pos(x,mask), mask)
+                    else:
+                        return layer(x,mask)
                 else:
-                    return layer(x)
+                    if pos is not None:
+                        return layer(pos(x))
+                    else:
+                        return layer(x)
             else:
                 return x
         else:
             if mask is not None:
-                return layer(x, mask)
+                if pos is not None:
+                    return layer(pos(x,mask),mask)
+                else:
+                    return layer(x, mask)
             else:
+                if pos is not None:
+                    return layer(pos(x))
                 return layer(x)
     
     
