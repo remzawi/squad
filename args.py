@@ -266,3 +266,15 @@ def add_train_test_args(parser):
                         type=int,
                         default=96,
                         help='Encoding size for QANet')
+    parser.add_argument('--mask_pos',
+                        type=bool,
+                        default=False,
+                        help='Whether to only add pos encoding to actual words')
+    parser.add_argument('--two_pos',
+                        type=bool,
+                        default=False,
+                        help='Whether to add a second position before attention')
+    parser.add_argument('--total_drop',
+                        type=bool,
+                        default=True,
+                        help='Whether to consider the whole encoder as one set of layers for stochastic dropout')

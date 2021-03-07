@@ -68,7 +68,10 @@ def main(args):
                       enc_size=args.enc_size,
                       n_head=args.n_head,
                       LN_train=args.ln_train,
-                      DP_residual=args.dp_res)
+                      DP_residual=args.dp_res,
+                      mask_pos=args.mask_pos,
+                      two_pos=args.two_pos,
+                      total_prob=args.total_drop)
     else:
         raise ValueError('Wrong model name')
         

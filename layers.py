@@ -309,8 +309,11 @@ class PositionalEncoding(nn.Module):
             self.scale_fact = 1
         
 
-    def forward(self, x):
-        x = x * self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]
+    def forward(self, x, mask=None):
+        if mask is not None:
+            x = x * self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]*mask.unsqueeze(2)
+        else:
+            x = x * self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]
         x = self.drop(x)
         return x
 
@@ -582,7 +585,9 @@ class EncoderBlock(nn.Module):
     Encoder block for QANet
     Support stochastic depth (set final_prob to less than 1, in th epaper they use 0.9)
     """
-    def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9, LN_train=True, DP_residual=False):
+    def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, 
+                 att_drop_prob = None, final_prob = 0.9, LN_train=True, DP_residual=False,
+                 mask_pos=False,two_pos=False):
         super(EncoderBlock, self).__init__()
         self.pos = PositionalEncoding(enc_size, 0, para_limit, False)
         self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob, LN_train, DP_residual) for i in range(n_conv)])
@@ -592,19 +597,29 @@ class EncoderBlock(nn.Module):
         self.final_prob = final_prob
         self.drop = nn.Dropout(drop_prob)
         self.do_depth = final_prob < 1
+        self.two_pos=two_pos
+        self.mask_pos=mask_pos
     def forward(self, x, mask = None, init_drop = 1, total_layers = None):
+        if self.mask_pos:
+            mask_pos = mask
+        else:
+            mask_pos = None
         if total_layers is None:
             total_layers = self.n_layers
-        out = self.pos(x) 
+        out = self.pos(x, mask_pos) 
         if self.do_depth:
             for i, conv in enumerate(self.convs):
                 out = self.drop_layer(out, conv, 1 - (i+init_drop)/total_layers*(1-self.final_prob))
+            if self.two_pos:
+                out = self.pos(out,mask)
             out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask)
             out = self.drop_layer(out, self.ff, 1 - (init_drop + self.n_layers - 1)/total_layers*(1-self.final_prob))
             return out
         else:
             for i, conv in enumerate(self.convs):
                 out = conv(out)
+            if self.two_pos:
+                out = self.pos(out,mask)
             out = self.att(out, mask)
             out = self.ff(out)
             return out
@@ -630,18 +645,29 @@ class StackedEncoderBlocks(nn.Module):
     Stack multiple encoer blocks
     Applies the stochastic depth along the entire set of blocks
     """
-    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9, LN_train = True, DP_residual=False):
+    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, 
+                 att_drop_prob = None, final_prob = 0.9, LN_train = True, DP_residual=False,
+                 mask_pos=False,two_pos=False, total_prob=True):
         super(StackedEncoderBlocks, self).__init__()
-        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, att_drop_prob = att_drop_prob, final_prob=final_prob, LN_train=LN_train, DP_residual=DP_residual)
+        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
+                                                    att_drop_prob = att_drop_prob, final_prob=final_prob, 
+                                                    LN_train=LN_train, DP_residual=DP_residual,
+                                                    mask_pos=mask_pos, two_pos=two_pos)
                                        for i in range(n_blocks)])
         self.total_layers = (n_conv + 2) * n_blocks
         self.layer_per_block = n_conv + 2
+        self.total_prob=total_prob
     def forward(self, x, mask = None):
-        current_init = 1
-        for encoder in self.encoders:
-            x = encoder(x, mask, current_init, self.total_layers)
-            current_init += self.layer_per_block
-        return x
+        if self.total_prob:
+            current_init = 1
+            for encoder in self.encoders:
+                x = encoder(x, mask, current_init, self.total_layers)
+                current_init += self.layer_per_block
+            return x
+        else:
+            for encoder in self.encoders:
+                x=encoder(x, mask)
+            return x
   
 
 

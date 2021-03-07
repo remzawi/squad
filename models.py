@@ -138,7 +138,9 @@ class BiDAFChar(nn.Module):
 
 
 class QANet(nn.Module):
-    def __init__(self, word_vectors, char_vec, word_len,  emb_size, enc_size=96, drop_prob=0.1, n_head=2, LN_train=True, DP_residual=False):
+    def __init__(self, word_vectors, char_vec, word_len,  emb_size, enc_size=96, 
+                 drop_prob=0.1, n_head=2, LN_train=True, DP_residual=False,
+                 mask_pos=False,two_pos=False,total_prob=True):
         super(QANet, self).__init__()
         self.emb = layers.EmbeddingWithChar(word_vectors=word_vectors,
                                     hidden_size=emb_size,
@@ -164,7 +166,9 @@ class QANet(nn.Module):
                                            att_drop_prob=drop_prob,
                                            final_prob=0.9, 
                                            LN_train=LN_train,
-                                           DP_residual=DP_residual)
+                                           DP_residual=DP_residual,
+                                           mask_pos=mask_pos,
+                                           two_pos=two_pos,)
         
         self.att = layers.BiDAFAttention(hidden_size=enc_size,
                                          drop_prob=0)
@@ -185,7 +189,10 @@ class QANet(nn.Module):
                                                      att_drop_prob=drop_prob,
                                                      final_prob=0.9, 
                                                      LN_train=LN_train,
-                                                     DP_residual=DP_residual)
+                                                     DP_residual=DP_residual,
+                                                     mask_pos=mask_pos,
+                                                     two_pos=two_pos,
+                                                     total_prob=total_prob)
         
         self.out_beg = layers.OutputBlock(enc_size)
         
