@@ -57,8 +57,8 @@ class CharEmbedding(nn.Module):
             self.embed = nn.Embedding.from_pretrained(char_vec, freeze=False)
         else:
             self.embed = nn.Embedding(char_vec.size(0), char_dim)
-        nn.init.uniform_(self.embed.weight, -0.01, 0.01)
-        self.char_cnn = nn.Conv2d(word_len, hidden_size, (1, 5))
+        nn.init.uniform_(self.embed.weight, -0.001, 0.001)
+        self.char_cnn = nn.Conv2d(word_len, hidden_size, (1, 5),padding=(1,2))
         
 
     def forward(self, x):
@@ -296,11 +296,11 @@ class PositionalEncoding(nn.Module):
     def __init__(self, hidden_size, drop_prob=0, para_limit=1000, scale=False):
         super(PositionalEncoding, self).__init__()
         self.drop = nn.Dropout(drop_prob)
-        pe = torch.zeros(para_limit, hidden_size) #(max_len, hidden_size)
+        pe = torch.zeros(para_limit+1, hidden_size) #(max_len, hidden_size)
         position = torch.arange(0, para_limit, dtype=torch.float).unsqueeze(1) #(para_limit, 1)
         div_term = torch.exp(torch.arange(0, hidden_size, 2).float() * (-math.log(10000.0) / hidden_size)) #(hidden_size//2)
-        pe[:, 0::2] = torch.sin(position * div_term) 
-        pe[:, 1::2] = torch.cos(position * div_term)
+        pe[1:, 0::2] = torch.sin(position * div_term) 
+        pe[1:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0) #(1,max_len,hidden_size)
         self.register_buffer('pe', pe)
         if scale:
@@ -406,7 +406,7 @@ class SelfAttention2(nn.Module):
         self.hidden_size = hidden_size
         assert hidden_size%n_head == 0
 
-        self.comb_proj = nn.Linear(hidden_size, 3 * hidden_size, bias = False)
+        self.comb_proj = nn.Linear(hidden_size, 3 * hidden_size)
 
         self.scale = (hidden_size // n_head) ** 0.5
         self.out_proj = nn.Linear(hidden_size, hidden_size)
@@ -493,6 +493,64 @@ class SelfAttentionBlock(nn.Module):
             return self.drop(x+att)
         else:
             return x+self.drop(att)
+        
+class EfficientAttention(nn.Module):
+    
+    def __init__(self, hidden_size, n_head, drop_prob=0.1):
+        super().__init__()
+        #self.in_channels = in_channels
+        #self.key_channels = key_channels
+        self.n_head = n_head
+        #self.value_channels = value_channels
+
+        #self.keys = nn.Conv2d(in_channels, key_channels, 1)
+        #self.queries = nn.Conv2d(in_channels, key_channels, 1)
+        #self.values = nn.Conv2d(in_channels, value_channels, 1)
+        #self.reprojection = nn.Conv2d(value_channels, in_channels, 1)
+        self.keys = DWConv(hidden_size, hidden_size, 1, bias = True, act=False)
+        self.queries = DWConv(hidden_size, hidden_size, 1, bias = True, act=False)
+        self.values = DWConv(hidden_size, hidden_size, 1, bias = True, act=False)
+        self.reprojection = DWConv(hidden_size, hidden_size, 1, bias = True, act=False)
+        self.drop=nn.Dropout(drop_prob)
+
+    def forward(self,x,mask):
+        B, L, H = x.sixe()
+        keys=self.keys(x).permute(0,2,1)
+        queries=self.queries(x).permute(0,2,1)
+        values=self.values(x).permute(0,2,1)
+        #keys = self.keys(input_).reshape((n, self.key_channels, h * w))
+        #queries = self.queries(input_).reshape(n, self.key_channels, h * w)
+        #values = self.values(input_).reshape((n, self.value_channels, h * w))
+        head_key_channels = H // self.n_head
+        head_value_channels = H // self.n_head
+        mask=mask.unsqueeze(1)
+        attended_values = []
+        for i in range(self.n_head):
+            key = masked_softmax(keys[
+                :,
+                i * head_key_channels: (i + 1) * head_key_channels,
+                :
+            ], mask,dim=2)
+            query = masked_softmax(queries[
+                :,
+                i * head_key_channels: (i + 1) * head_key_channels,
+                :
+            ], mask, dim=1)
+            value = values[
+                :,
+                i * head_value_channels: (i + 1) * head_value_channels,
+                :
+            ]
+            context = key @ value.transpose(1, 2)
+            attended_value = (
+                context.transpose(1, 2) @ query
+            )
+            attended_values.append(attended_value)
+
+        aggregated_values = torch.cat(attended_values, dim=1)
+        reprojected_value = self.reprojection(self.drop(aggregated_values.permute(0,2,1)))
+
+        return reprojected_value       
     
     
 class FeedForwardBlock(nn.Module):
@@ -574,7 +632,7 @@ class StackedEncoderBlocks(nn.Module):
     """
     def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob = 0.9, LN_train = True, DP_residual=False):
         super(StackedEncoderBlocks, self).__init__()
-        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, att_drop_prob = None, final_prob=final_prob, LN_train=LN_train, DP_residual=DP_residual)
+        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, att_drop_prob = att_drop_prob, final_prob=final_prob, LN_train=LN_train, DP_residual=DP_residual)
                                        for i in range(n_blocks)])
         self.total_layers = (n_conv + 2) * n_blocks
         self.layer_per_block = n_conv + 2
@@ -593,7 +651,7 @@ class OutputBlock(nn.Module):
     """
     def __init__(self, hidden_size):
         super(OutputBlock, self).__init__() 
-        self.proj = nn.Linear(2 * hidden_size, 1, bias=False)
+        self.proj = nn.Linear(2 * hidden_size, 1)
         
     def forward(self, x1, x2, mask):
         x = torch.cat([x1, x2], dim = -1)

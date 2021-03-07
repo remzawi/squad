@@ -151,8 +151,9 @@ class QANet(nn.Module):
         
         self.emb_resize = layers.Resizer(input_size=emb_size,
                                          output_size=enc_size,
-                                         kernel_size=7,
-                                         drop_prob=0)
+                                         kernel_size=1,
+                                         drop_prob=0,
+                                         bias=True)
         
         self.emb_enc = layers.EncoderBlock(enc_size=enc_size,
                                            para_limit=1000,
@@ -170,8 +171,9 @@ class QANet(nn.Module):
         
         self.att_resize = layers.Resizer(input_size=4*enc_size,
                                          output_size=enc_size,
-                                         kernel_size=5,
-                                         drop_prob=0)
+                                         kernel_size=1,
+                                         drop_prob=0,
+                                         bias=True)
         
         self.model_enc = layers.StackedEncoderBlocks(n_blocks=7,
                                                      hidden_size=enc_size,

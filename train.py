@@ -103,10 +103,10 @@ def main(args):
                                 use_gc=True)
         else:    
             optimizer = AdamW(model.parameters(), args.lr,
-                                betas=(0.9, 0.999),
+                                betas=(0.8, 0.999),
                                 weight_decay=3*1e-7,
                                 eps=1e-7)
-        scheduler = warmup(optimizer, 1, 4000)
+        scheduler = warmup(optimizer, 1, 2000)
     else:
         optimizer = optim.Adadelta(model.parameters(), args.lr,
                                    weight_decay=3*1e-7)
