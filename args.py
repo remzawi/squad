@@ -150,6 +150,10 @@ def get_train_args():
                         type=bool,
                         default=False,
                         help='Whether to include residuals in dropout')
+    parser.add_argument('--final_prob',
+                        type=float,
+                        default=0.9,
+                        help='Survival probability of last layer')
 
     args = parser.parse_args()
 
