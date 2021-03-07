@@ -58,7 +58,7 @@ class CharEmbedding(nn.Module):
         else:
             self.embed = nn.Embedding(char_vec.size(0), char_dim)
         nn.init.uniform_(self.embed.weight, -0.001, 0.001)
-        self.char_cnn = nn.Conv2d(word_len, hidden_size, (1, 5),padding=(1,2))
+        self.char_cnn = nn.Conv2d(word_len, hidden_size, (1, 5))
         
 
     def forward(self, x):
