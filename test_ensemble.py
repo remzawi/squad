@@ -124,12 +124,15 @@ def main(args):
             cw_idxs = cw_idxs.to(device)
             qw_idxs = qw_idxs.to(device)
             batch_size = cw_idxs.size(0)
+            
 
             # Forward
             log_p1_1, log_p2_1 = model(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
             log_p1_2, log_p2_2 = model2(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
-            log_p1 = weight * log_p1_1 + (1-weight) * log_p1_2
-            log_p2 = weight * log_p2_1 + (1-weight) * log_p2_2
+            #log_p1 = weight * log_p1_1 + (1-weight) * log_p1_2
+            #log_p2 = weight * log_p2_1 + (1-weight) * log_p2_2
+            log_p1 = torch.log(weight * torch.exp(log_p1_1) + (1-weight) * torch.exp(log_p1_2))
+            log_p2 = torch.log(weight * torch.exp(log_p2_1) + (1-weight) * torch.exp(log_p2_2))
             y1, y2 = y1.to(device), y2.to(device)
             loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
             nll_meter.update(loss.item(), batch_size)
