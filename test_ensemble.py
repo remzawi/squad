@@ -69,6 +69,34 @@ def main(args):
     model = util.load_model(model, args.load_path, gpu_ids, return_step=False)
     model = model.to(device)
     model.eval()
+    
+    log.info('Building model...')
+    if args.name2 == 'baseline':
+        model2 = BiDAF(word_vectors=word_vectors,
+                    hidden_size=args.hidden_size2)
+    elif args.name2 == 'charembeddings':
+        model2 = BiDAFChar(word_vectors=word_vectors,
+                    char_vec = char_vec,
+                    word_len = 16,
+                    hidden_size=args.hidden_size2)
+    elif args.name2 == 'qanet':
+        model2 = QANet(word_vectors=word_vectors,
+                      char_vec=char_vec,
+                      word_len= 16,
+                      emb_size = args.hidden_size2,
+                      enc_size=args.enc_size,
+                      n_head=args.n_head,
+                      LN_train=args.ln_train,
+                      DP_residual=args.dp_res,
+                      mask_pos=args.mask_pos,
+                      two_pos=args.two_pos)
+    else:
+        raise ValueError('Wrong model name')
+    model = nn.DataParallel(model, gpu_ids)
+    log.info(f'Loading checkpoint from {args.load_path}...')
+    model = util.load_model(model, args.load_path, gpu_ids, return_step=False)
+    model = model.to(device)
+    model.eval()
 
     # Get data loader
     log.info('Building dataset...')
@@ -97,7 +125,7 @@ def main(args):
             batch_size = cw_idxs.size(0)
 
             # Forward
-            log_p1, log_p2 = model(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
+            log_p1, log_p2 = args.weight_model1*model(cw_idxs, cc_idxs, qw_idxs, qc_idxs) + (1-args.weight_model1)*model2(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
             y1, y2 = y1.to(device), y2.to(device)
             loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
             nll_meter.update(loss.item(), batch_size)

@@ -553,7 +553,118 @@ class EfficientAttention(nn.Module):
         aggregated_values = torch.cat(attended_values, dim=1)
         reprojected_value = self.reprojection(self.drop(aggregated_values.permute(0,2,1)))
 
-        return reprojected_value       
+        return reprojected_value
+    
+class MultiHeadedAttention_RPR(nn.Module):
+    """ @ author: Yekun CHAI 
+    https://ychai.uk/notes/2019/10/17/NN/Transformer-variants-a-peek/"""
+    def __init__(self, hidden_size, n_head, max_relative_position, dropout=.0):
+        """
+        multi-head attention
+        :param h: nhead
+        :param hidden_size: hidden_size
+        :param dropout: float
+        """
+        super(MultiHeadedAttention_RPR, self).__init__()
+        assert hidden_size % n_head == 0
+        #  assume d_v always equals d_k
+        self.d_k = hidden_size // n_head
+        self.n_head = n_head
+        self.linears=nn.ModuleList([nn.Linear(hidden_size, hidden_size) for i in range(4)])
+        #self.linears = utils.clones(nn.Linear(hidden_size, hidden_size), 4)
+        self.dropout = nn.Dropout(p=dropout)
+
+        self.max_relative_position = max_relative_position
+        self.vocab_size = max_relative_position * 2 + 1
+        self.embed_K = nn.Embedding(self.vocab_size, self.d_k)
+        self.embed_V = nn.Embedding(self.vocab_size, self.d_k)
+
+    def forward(self, x, mask=None):
+        """
+        ---------------------------
+        L : target sequence length
+        S : source sequence length:
+        N : batch size
+        E : embedding dim
+        ---------------------------
+        :param query: (N,L,E)
+        :param key: (N,S,E)
+        :param value: (N,S,E)
+        :param mask:
+        """
+        key=x
+        query=x
+        value=x
+        nbatches = query.size(0)  # batch size
+        seq_len = query.size(1)
+        # 1) split embedding dim to h heads : from hidden_size => h * d_k
+        # dim: (nbatch, h, seq_length, hidden_size//h)
+        query, key, value = \
+            [l(x).view(nbatches, -1, self.n_head, self.d_k).transpose(1, 2)
+             for l, x in zip(self.linears, (query, key, value))]
+
+        # 2) rpr
+        relation_keys = self.generate_relative_positions_embeddings(seq_len, seq_len, self.embed_K)
+        relation_values = self.generate_relative_positions_embeddings(seq_len, seq_len, self.embed_V)
+        logits = self._relative_attn_inner(query, key, relation_keys, True)
+        mask = mask.unsqueeze(1)
+        mask = mask.unsqueeze(1)
+        mask = mask.repeat(1,self.n_head)
+        weights = self.dropout(masked_softmax(logits, -1))
+        x = self._relative_attn_inner(weights, value, relation_values, False)
+        # 3) "Concat" using a view and apply a final linear.
+        # dim: (nbatch, h, hidden_size)
+        x = x.transpose(1, 2).contiguous().view(nbatches, -1, self.n_head * self.d_k)
+        return self.linears[-1](x)
+
+    def _generate_relative_positions_matrix(self, len_q, len_k):
+        """
+        genetate rpr matrix
+        ---------------------------
+        :param len_q: seq_len
+        :param len_k: seq_len
+        :return: rpr matrix, dim: (len_q, len_q)
+        """
+        assert len_q == len_k
+        range_vec_q = range_vec_k = torch.arange(len_q)
+        distance_mat = range_vec_k.unsqueeze(0) - range_vec_q.unsqueeze(-1)
+        disntance_mat_clipped = torch.clamp(distance_mat, -self.max_relative_position, self.max_relative_position)
+        return disntance_mat_clipped + self.max_relative_position
+
+    def generate_relative_positions_embeddings(self, len_q, len_k, embedding_table):
+        """
+        generate relative position embedding
+        ----------------------
+        :param len_q:
+        :param len_k:
+        :return: rpr embedding, dim: (len_q, len_q, d_k)
+        """
+        relative_position_matrix = self._generate_relative_positions_matrix(len_q, len_k)
+        return embedding_table(relative_position_matrix)
+
+    def _relative_attn_inner(self, x, y, z, transpose):
+        """
+        efficient implementation
+        ------------------------
+        :param x: 
+        :param y: 
+        :param z: 
+        :param transpose: 
+        :return: 
+        """
+        nbatches = x.size(0)
+        heads = x.size(1)
+        seq_len = x.size(2)
+
+        # (N, h, s, s)
+        xy_matmul = torch.matmul(x, y.transpose(-1, -2) if transpose else y)
+        # (s, N, h, d) => (s, N*h, d)
+        x_t_v = x.permute(2, 0, 1, 3).contiguous().view(seq_len, nbatches * heads, -1)
+        # (s, N*h, d) @ (s, d, s) => (s, N*h, s)
+        x_tz_matmul = torch.matmul(x_t_v, z.transpose(-1, -2) if transpose else z)
+        # (N, h, s, s)
+        x_tz_matmul_v_t = x_tz_matmul.view(seq_len, nbatches, heads, -1).permute(1, 2, 0, 3)
+        return xy_matmul + x_tz_matmul_v_t           
     
     
 class FeedForwardBlock(nn.Module):

@@ -142,18 +142,15 @@ def get_train_args():
                         type=bool,
                         default=False,
                         help='Whether to perform gradient centralization')
-    parser.add_argument('--ln_train',
-                        type=bool,
-                        default=True,
-                        help='Whether to train layernorm')
-    parser.add_argument('--dp_res',
-                        type=bool,
-                        default=False,
-                        help='Whether to include residuals in dropout')
     parser.add_argument('--final_prob',
                         type=float,
                         default=0.9,
                         help='Survival probability of last layer')
+    parser.add_argument('--total_drop',
+                        type=bool,
+                        default=True,
+                        help='Whether to consider the whole encoder as one set of layers for stochastic dropout')
+    
 
     args = parser.parse_args()
 
@@ -185,6 +182,22 @@ def get_test_args():
                         type=str,
                         default='submission.csv',
                         help='Name for submission file.')
+    parser.add_argument('--name2',
+                        type=str,
+                        required=False,
+                        help='Name to identify training or test run for ensemble.')
+    parser.add_argument('--load_path_2',
+                        type=str,
+                        default=None,
+                        help='Path to load as a model checkpoint for ensemble.')
+    parser.add_argument('--weight_model1',
+                        type=float,
+                        default=0.5,
+                        help="Weight for first model betwene 0 and 1.")
+    parser.add_argument('--hidden_size2',
+                        type=int,
+                        default=100,
+                        help='Number of features in encoder hidden layers for second model.')
 
     # Require load_path for test.py
     args = parser.parse_args()
@@ -229,6 +242,7 @@ def add_train_test_args(parser):
                         type=str,
                         required=True,
                         help='Name to identify training or test run.')
+    
     parser.add_argument('--max_ans_len',
                         type=int,
                         default=15,
@@ -262,6 +276,7 @@ def add_train_test_args(parser):
                         type=str,
                         default=None,
                         help='Path to load as a model checkpoint.')
+    
     parser.add_argument('--n_head',
                         type=int,
                         default=2,
@@ -278,7 +293,12 @@ def add_train_test_args(parser):
                         type=bool,
                         default=False,
                         help='Whether to add a second position before attention')
-    parser.add_argument('--total_drop',
+    parser.add_argument('--ln_train',
                         type=bool,
                         default=True,
-                        help='Whether to consider the whole encoder as one set of layers for stochastic dropout')
+                        help='Whether to train layernorm')
+    parser.add_argument('--dp_res',
+                        type=bool,
+                        default=False,
+                        help='Whether to include residuals in dropout')
+    
