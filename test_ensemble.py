@@ -93,9 +93,9 @@ def main(args):
     else:
         raise ValueError('Wrong model name')
     model2 = nn.DataParallel(model, gpu_ids)
-    log.info(f'Loading checkpoint from {args.load_path}...')
-    model2 = util.load_model(model, args.load_path, gpu_ids, return_step=False)
-    model2 = model.to(device)
+    log.info(f'Loading checkpoint from {args.load_path_2}...')
+    model2 = util.load_model(model, args.load_path_2, gpu_ids, return_step=False)
+    model2 = model2.to(device)
     model2.eval()
 
     # Get data loader
