@@ -92,9 +92,9 @@ def main(args):
                       two_pos=args.two_pos)
     else:
         raise ValueError('Wrong model name')
-    model2 = nn.DataParallel(model, gpu_ids)
+    model2 = nn.DataParallel(model2, gpu_ids)
     log.info(f'Loading checkpoint from {args.load_path_2}...')
-    model2 = util.load_model(model, args.load_path_2, gpu_ids, return_step=False)
+    model2 = util.load_model(model2, args.load_path_2, gpu_ids, return_step=False)
     model2 = model2.to(device)
     model2.eval()
 
