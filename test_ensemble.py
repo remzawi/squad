@@ -114,6 +114,7 @@ def main(args):
     pred_dict = {}  # Predictions for TensorBoard
     sub_dict = {}   # Predictions for submission
     eval_file = vars(args)[f'{args.split}_eval_file']
+    weight = torch.tensor(args.weight_model1).to(device)
     with open(eval_file, 'r') as fh:
         gold_dict = json_load(fh)
     with torch.no_grad(), \
