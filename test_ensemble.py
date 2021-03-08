@@ -126,7 +126,7 @@ def main(args):
             batch_size = cw_idxs.size(0)
 
             # Forward
-            log_p1, log_p2 = args.weight_model1*model(cw_idxs, cc_idxs, qw_idxs, qc_idxs) + (1-args.weight_model1)*model2(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
+            log_p1, log_p2 = weight*model(cw_idxs, cc_idxs, qw_idxs, qc_idxs) + (1.0-weight)*model2(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
             y1, y2 = y1.to(device), y2.to(device)
             loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
             nll_meter.update(loss.item(), batch_size)
