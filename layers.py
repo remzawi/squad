@@ -642,7 +642,7 @@ class MultiHeadedAttention_RPR(nn.Module):
         :return: rpr embedding, dim: (len_q, len_q, d_k)
         """
         relative_position_matrix = self._generate_relative_positions_matrix(len_q, len_k)
-        return embedding_table(relative_position_matrix)
+        return embedding_table(relative_position_matrix).cuda()
 
     def _relative_attn_inner(self, x, y, z, transpose):
         """
