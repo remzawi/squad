@@ -323,7 +323,7 @@ class DWConv(nn.Module):
     """
     Depthwise separable 1d convolution
     """
-    def __init__(self, nin, nout, kernel_size, bias = True, act = True):
+    def __init__(self, nin, nout, kernel_size, bias = True, act = 'relu'):
         super(DWConv, self).__init__()
         self.depthwise = nn.Conv1d(nin, nin, kernel_size=kernel_size, padding=kernel_size//2, groups=nin,bias=bias)
         self.pointwise = nn.Conv1d(nin, nout, kernel_size=1,bias=bias)
@@ -333,14 +333,16 @@ class DWConv(nn.Module):
         out = self.depthwise(x.permute(0,2,1))
         out = self.pointwise(out)
         out = out.permute(0,2,1)
-        if self.act:
+        if self.act == 'relu':
             out = F.relu(out)
+        elif self.act == 'gelu':
+            out = gelu(out)
         return out
     
 class ConvBlock(nn.Module):
-    def __init__(self, input_size, hidden_size, kernel_size, drop_prob, LN_train=True, DP_residual=False):
+    def __init__(self, input_size, hidden_size, kernel_size, drop_prob, LN_train=True, DP_residual=False, act = 'relu'):
         super(ConvBlock, self).__init__()
-        self.conv = DWConv(input_size, hidden_size, kernel_size)
+        self.conv = DWConv(input_size, hidden_size, kernel_size, act = act)
         self.drop = nn.Dropout(drop_prob)
         self.norm = nn.LayerNorm(input_size, elementwise_affine=LN_train)
         self.DP_residual=DP_residual
@@ -668,28 +670,48 @@ class MultiHeadedAttention_RPR(nn.Module):
     
     
 class FeedForwardBlock(nn.Module):
-    def __init__(self, hidden_size, drop_prob, LN_train=True, DP_residual=False):
+    def __init__(self, hidden_size, drop_prob, LN_train=True, DP_residual=False, act = 'relu'):
         super(FeedForwardBlock, self).__init__()
         self.proj = nn.Linear(hidden_size, hidden_size)
         self.norm = nn.LayerNorm(hidden_size,elementwise_affine=LN_train)
         self.drop = nn.Dropout(drop_prob)
         self.DP_residual=DP_residual
+        self.act = act
     def forward(self, x):
         norm = self.norm(x)
-        proj = F.relu(self.proj(norm))
+        proj = self.proj(norm)
+        if self.act == 'relu':
+            proj = F.relu(proj)
+        elif self.act == 'gelu':
+            proj = gelu(proj)
         if self.DP_residual:
             return self.drop(x+proj)
         else:
             return x + self.drop(proj)
     
 class Resizer(nn.Module):
-    def __init__(self, input_size, output_size, kernel_size, drop_prob= 0, bias=False, act = False):
+    def __init__(self, input_size, output_size, kernel_size, drop_prob= 0, bias=False, act = None):
         super(Resizer, self).__init__()
         self.conv = DWConv(input_size, output_size, kernel_size,bias=bias,act=act)
         self.drop = nn.Dropout(drop_prob)
     def forward(self, x):
         out = self.conv(x)
         return self.drop(out)
+
+def gelu(x):
+    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+   
+class GeluBlock(nn.Module):
+    def __init__(self, hidden_size, drop_prob = 0.):
+        super(GeluBlock, self).__init__()
+        self.wg = nn.Linear(hidden_size, hidden_size)
+        self.wr = nn.Linear(hidden_size, hidden_size)
+        self.drop = nn.Dropout(drop_prob)
+        
+    def forward(self, x):
+        r = gelu(self.wr(x))
+        g = F.sigmoid(self.wg(x))
+        return g * self.drop(r) + (1 - g) * x
     
 class EncoderBlock(nn.Module):
     """
@@ -698,18 +720,22 @@ class EncoderBlock(nn.Module):
     """
     def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, 
                  att_drop_prob = None, final_prob = 0.9, LN_train=True, DP_residual=False,
-                 mask_pos=False,two_pos=False):
+                 mask_pos=False,two_pos=False, rel = False,act = 'relu'):
         super(EncoderBlock, self).__init__()
         self.pos = PositionalEncoding(enc_size, 0, para_limit, False)
-        self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob, LN_train, DP_residual) for i in range(n_conv)])
+        self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob, LN_train, DP_residual, act) for i in range(n_conv)])
         self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob, LN_train, DP_residual)
-        self.ff = FeedForwardBlock(enc_size, drop_prob, LN_train, DP_residual)
+        self.ff = FeedForwardBlock(enc_size, drop_prob, LN_train, DP_residual, act=act)
         self.n_layers = n_conv + 2
         self.final_prob = final_prob
         self.drop = nn.Dropout(drop_prob)
         self.do_depth = final_prob < 1
         self.two_pos=two_pos
         self.mask_pos=mask_pos
+        self.rel = rel
+        if rel:
+            self.rel_att= MultiHeadedAttention_RPR(enc_size, n_head, 6, drop_prob)
+            self.two_pos = False
     def forward(self, x, mask = None, init_drop = 1, total_layers = None):
         if self.mask_pos:
             mask_pos = mask
@@ -732,7 +758,11 @@ class EncoderBlock(nn.Module):
                 out = conv(out)
             if self.two_pos:
                 out = self.pos(out,mask)
-            out = self.att(out, mask)
+                out = self.att(out, mask)
+            elif self.rel:
+                out = self.rel_att(out, mask)
+            else:
+                out = self.att(out,mask)
             out = self.ff(out)
             return out
             
@@ -770,12 +800,12 @@ class StackedEncoderBlocks(nn.Module):
     """
     def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, 
                  att_drop_prob = None, final_prob = 0.9, LN_train = True, DP_residual=False,
-                 mask_pos=False,two_pos=False, total_prob=True):
+                 mask_pos=False,two_pos=False, rel = False, total_prob=True, act = 'relu'):
         super(StackedEncoderBlocks, self).__init__()
         self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
                                                     att_drop_prob = att_drop_prob, final_prob=final_prob, 
                                                     LN_train=LN_train, DP_residual=DP_residual,
-                                                    mask_pos=mask_pos, two_pos=two_pos)
+                                                    mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act)
                                        for i in range(n_blocks)])
         self.total_layers = (n_conv + 2) * n_blocks
         self.layer_per_block = n_conv + 2

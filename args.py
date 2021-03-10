@@ -301,4 +301,8 @@ def add_train_test_args(parser):
                         type=bool,
                         default=False,
                         help='Whether to include residuals in dropout')
+    parser.add_argument('--rel_att',
+                        type=bool,
+                        default=False,
+                        help='Whether to do relative attention')
     
