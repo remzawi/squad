@@ -13,7 +13,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as sched
 import torch.utils.data as data
 import util
-from adamW import AdamW, AdamWGC
+from optimizers import AdamW, AdamWGC, AdamP, Lamb
 
 from args import get_train_args
 from collections import OrderedDict
@@ -87,7 +87,8 @@ def main(args):
                       two_pos=args.two_pos,
                       rel=args.rel_att,
                       total_prob=args.total_drop,
-                      final_prob=args.final_prob)
+                      final_prob=args.final_prob,
+                      freeze=args.freeze_emb)
     else:
         raise ValueError('Wrong model name')
         
@@ -109,7 +110,7 @@ def main(args):
                                  log=log)
 
     # Get optimizer and scheduler
-    if args.name == 'qanet' or args.name == 'qanet2':
+    if args.opt == 'adam':
         #optimizer = optim.Adam(model.parameters(), args.lr,
         #                       betas=(0.8, 0.999),
         #                       weight_decay=3*1e-7,
@@ -126,10 +127,22 @@ def main(args):
                                 weight_decay=3*1e-7,
                                 eps=1e-7)
         scheduler = warmup(optimizer, 1, 2000)
-    else:
+    elif args.opt == 'adadelta':
         optimizer = optim.Adadelta(model.parameters(), args.lr,
                                    weight_decay=3*1e-7)
         scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
+    elif args.opt == 'sgd':
+        optimizer = optim.SGD(model.parameters(), args.lr,
+                                   weight_decay=3*1e-7)
+        scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
+    elif args.opt == 'adamp':
+        optimizer = AdamP(model.parameters(), args.lr,
+                                   weight_decay=3*1e-7)
+        scheduler = warmup(optimizer, 1, 2000)
+    elif args.opt == 'lamb':
+        optimizer = Lamb(model.parameters(), args.lr,
+                                   weight_decay=3*1e-7)
+        scheduler = warmup(optimizer, 1, 2000)
 
     # Get data loader
     log.info('Building dataset...')

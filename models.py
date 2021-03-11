@@ -235,7 +235,7 @@ class QANet(nn.Module):
 class QANet2(nn.Module):
     def __init__(self, word_vectors, char_vec, word_len,  emb_size, enc_size=128, 
                  drop_prob=0.1, n_head=8, LN_train=True, DP_residual=False,
-                 mask_pos=False,two_pos=False,rel=False,total_prob=True,final_prob=0.9):
+                 mask_pos=False,two_pos=False,rel=False,total_prob=True,final_prob=0.9,freeze=True):
         super(QANet2, self).__init__()
         self.emb = layers.EmbeddingWithChar(word_vectors=word_vectors,
                                     hidden_size=emb_size,
@@ -244,7 +244,10 @@ class QANet2(nn.Module):
                                     drop_prob = drop_prob,
                                     char_prop=0.4,
                                     hwy_drop=drop_prob,
-                                    char_dim=200)
+                                    char_dim=200,
+                                    bias = True,
+                                    freeze=freeze,
+                                    act='relu')
         
         self.emb_resize = layers.Resizer(input_size=emb_size,
                                          output_size=enc_size,
@@ -265,7 +268,10 @@ class QANet2(nn.Module):
                                            mask_pos=mask_pos,
                                            two_pos=two_pos,
                                            rel=rel,
-                                           act='gelu')
+                                           act='gelu',
+                                           pos_emb=False,
+                                           from_pretrained=True,
+                                           freeze_pos=False)
         
         self.att = layers.BiDAFAttention(hidden_size=enc_size,
                                          drop_prob=0)

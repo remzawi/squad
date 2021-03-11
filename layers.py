@@ -24,11 +24,11 @@ class Embedding(nn.Module):
         hidden_size (int): Size of hidden activations.
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, word_vectors, hidden_size, drop_prob):
+    def __init__(self, word_vectors, hidden_size, drop_prob ,freeze = True, bias=False):
         super(Embedding, self).__init__()
         self.drop = nn.Dropout(drop_prob)
-        self.embed = nn.Embedding.from_pretrained(word_vectors)
-        self.proj = nn.Linear(word_vectors.size(1), hidden_size, bias=False)
+        self.embed = nn.Embedding.from_pretrained(word_vectors, freeze=freeze)
+        self.proj = nn.Linear(word_vectors.size(1), hidden_size, bias=bias)
         self.hwy = HighwayEncoder(2, hidden_size)
 
     def forward(self, x):
@@ -50,7 +50,7 @@ class CharEmbedding(nn.Module):
         word_len (torch.Tensor): Max word len
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, char_vec, word_len, hidden_size, drop_prob, char_dim = None):
+    def __init__(self, char_vec, word_len, hidden_size, drop_prob, char_dim = None, act='relu'):
         super(CharEmbedding, self).__init__()
         self.drop = nn.Dropout(drop_prob)
         if char_dim is None:
@@ -59,6 +59,7 @@ class CharEmbedding(nn.Module):
             self.embed = nn.Embedding(char_vec.size(0), char_dim)
         nn.init.uniform_(self.embed.weight, -0.001, 0.001)
         self.char_cnn = nn.Conv2d(word_len, hidden_size, (1, 5))
+        self.act = act
         
 
     def forward(self, x):
@@ -66,7 +67,10 @@ class CharEmbedding(nn.Module):
         emb = self.embed(x)   # (batch_size, seq_len, word_len, embed_size)
         emb = self.drop(emb)
         emb = self.char_cnn(emb.permute(0, 2, 1, 3)) # (batch_size , hidden_size, seq_len, conv_size)
-        emb = F.relu(emb)
+        if self.act == 'relu':
+            emb = F.relu(emb)
+        elif self.act == 'gelu':
+            emb = gelu(emb)
         emb = torch.max(emb.permute(0, 2, 1, 3), -1)[0] # (batch_size, seq_len, hidden_size)
 
         return emb
@@ -82,15 +86,15 @@ class EmbeddingWithChar(nn.Module):
         hidden_size (int): Size of hidden activations.
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, word_vectors, hidden_size, char_vec, word_len, drop_prob, char_prop=0.2, hwy_drop = 0, char_dim = None):
+    def __init__(self, word_vectors, hidden_size, char_vec, word_len, drop_prob, char_prop=0.2, hwy_drop = 0, char_dim = None, act = 'relu', bias = False, freeze = True):
         super(EmbeddingWithChar, self).__init__()
         self.drop = nn.Dropout(drop_prob)
-        self.word_embed = nn.Embedding.from_pretrained(word_vectors)
+        self.word_embed = nn.Embedding.from_pretrained(word_vectors, freeze=freeze)
         char_size = int(hidden_size*char_prop)
         word_size = hidden_size - char_size
-        self.char_embed = CharEmbedding(char_vec, word_len, char_size, drop_prob = 0.05, char_dim=char_dim)
-        self.proj = nn.Linear(word_vectors.size(1), word_size, bias=False)
-        self.hwy = HighwayEncoder(2, hidden_size, hwy_drop)
+        self.char_embed = CharEmbedding(char_vec, word_len, char_size, drop_prob = 0.05, char_dim=char_dim, act=act)
+        self.proj = nn.Linear(word_vectors.size(1), word_size, bias=bias)
+        self.hwy = HighwayEncoder(2, hidden_size, hwy_drop, act=act)
 
     def forward(self, x, char_x):
         word_emb = self.word_embed(x)   # (batch_size, seq_len, embed_size)
@@ -114,19 +118,24 @@ class HighwayEncoder(nn.Module):
         num_layers (int): Number of layers in the highway encoder.
         hidden_size (int): Size of hidden activations.
     """
-    def __init__(self, num_layers, hidden_size, drop_prob = 0):
+    def __init__(self, num_layers, hidden_size, drop_prob = 0, act = 'relu'):
         super(HighwayEncoder, self).__init__()
         self.transforms = nn.ModuleList([nn.Linear(hidden_size, hidden_size)
                                          for _ in range(num_layers)])
         self.gates = nn.ModuleList([nn.Linear(hidden_size, hidden_size)
                                     for _ in range(num_layers)])
         self.drop = nn.Dropout(drop_prob)
+        self.act = act
 
     def forward(self, x):
+        if self.act == 'gelu':
+            act = gelu
+        else:
+            act = F.relu
         for gate, transform in zip(self.gates, self.transforms):
             # Shapes of g, t, and x are all (batch_size, seq_len, hidden_size)
             g = torch.sigmoid(gate(x))
-            t = F.relu(transform(x))
+            t = act(transform(x))
             t = self.drop(t)
             x = g * t + (1 - g) * x
 
@@ -314,6 +323,41 @@ class PositionalEncoding(nn.Module):
             x = x * self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]*mask.unsqueeze(2).type(torch.float32)
         else:
             x = x * self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]
+        x = self.drop(x)
+        return x
+    
+class PositionalEmbedding(nn.Module):
+    """
+    Implements a non-trainable positional encoder based on sin and cos functions
+    Based on the implementation originaly proposed in Attention is All You Need
+    Input size: (batch_size, seq_len, hidden_size)
+    """
+    def __init__(self, hidden_size, drop_prob=0, para_limit=1000, scale=False, from_pretrained = True, freeze = True):
+        super(PositionalEncoding, self).__init__()
+        self.drop = nn.Dropout(drop_prob)
+        if from_pretrained:
+            pe = torch.zeros(para_limit+1, hidden_size) #(max_len, hidden_size)
+            position = torch.arange(0, para_limit, dtype=torch.float).unsqueeze(1) #(para_limit, 1)
+            div_term = torch.exp(torch.arange(0, hidden_size, 2).float() * (-math.log(10000.0) / hidden_size)) #(hidden_size//2)
+            pe[1:, 0::2] = torch.sin(position * div_term) 
+            pe[1:, 1::2] = torch.cos(position * div_term)
+            self.emb = nn.Embedding.from_pretrained(pe, freeze = freeze)
+        else:
+            self.emb = nn.Embedding(para_limit+1,hidden_size)
+            nn.init.uniform_(self.emb.weight, -0.01, 0.01)
+        if scale:
+            self.scale_fact = hidden_size ** 0.5
+        else:
+            self.scale_fact = 1
+        
+
+    def forward(self, x, mask=None):
+        pos_emb = self.emb(torch.arange(x.size(1))) # (seq_len, hidden_size)
+        if mask is not None:
+            
+            x = x * self.scale_fact + pos_emb.expand(x.size(0), -1, -1)*mask.unsqueeze(2).type(torch.float32)
+        else:
+            x = x * self.scale_fact + pos_emb.expand(x.size(0), -1, -1)[:,:x.size(1),:]
         x = self.drop(x)
         return x
 
@@ -720,7 +764,8 @@ class EncoderBlock(nn.Module):
     """
     def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, 
                  att_drop_prob = None, final_prob = 0.9, LN_train=True, DP_residual=False,
-                 mask_pos=False,two_pos=False, rel = False,act = 'relu'):
+                 mask_pos=False,two_pos=False, rel = False,act = 'relu', 
+                 pos_emb = False, from_pretrained = True, freeze_pos = False):
         super(EncoderBlock, self).__init__()
         self.pos = PositionalEncoding(enc_size, 0, para_limit, False)
         self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob, LN_train, DP_residual, act) for i in range(n_conv)])
@@ -730,7 +775,14 @@ class EncoderBlock(nn.Module):
         self.final_prob = final_prob
         self.drop = nn.Dropout(drop_prob)
         self.do_depth = final_prob < 1
-        self.two_pos=two_pos
+        if self.two_pos:
+            if pos_emb:
+                self.second_pos = PositionalEmbedding(enc_size, 0, para_limit, False,from_pretrained, freeze_pos)
+            else:
+                self.second_pos = self.pose
+        else:
+            self.second_pos = None
+        
         self.mask_pos=mask_pos
         self.rel = rel
         if rel:
@@ -756,8 +808,8 @@ class EncoderBlock(nn.Module):
         else:
             for i, conv in enumerate(self.convs):
                 out = conv(out)
-            if self.two_pos:
-                out = self.pos(out,mask)
+            if self.second_pos is not None:
+                out = self.second_pos(out,mask)
                 out = self.att(out, mask)
             elif self.rel:
                 out = self.rel_att(out, mask)
@@ -800,12 +852,14 @@ class StackedEncoderBlocks(nn.Module):
     """
     def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, 
                  att_drop_prob = None, final_prob = 0.9, LN_train = True, DP_residual=False,
-                 mask_pos=False,two_pos=False, rel = False, total_prob=True, act = 'relu'):
+                 mask_pos=False,two_pos=False, rel = False, total_prob=True, act = 'relu',
+                 pos_emb = False, from_pretrained = True, freeze_pos = False):
         super(StackedEncoderBlocks, self).__init__()
         self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
                                                     att_drop_prob = att_drop_prob, final_prob=final_prob, 
                                                     LN_train=LN_train, DP_residual=DP_residual,
-                                                    mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act)
+                                                    mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act,
+                                                    pos_emb = pos_emb, from_pretrained = from_pretrained, freeze_pos = freeze_pos)
                                        for i in range(n_blocks)])
         self.total_layers = (n_conv + 2) * n_blocks
         self.layer_per_block = n_conv + 2

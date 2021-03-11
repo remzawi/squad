@@ -150,6 +150,10 @@ def get_train_args():
                         type=bool,
                         default=True,
                         help='Whether to consider the whole encoder as one set of layers for stochastic dropout')
+    parser.add_argument('--opt',
+                        type=str,
+                        default='adadelta',
+                        help='Optimizer to use.')
     
 
     args = parser.parse_args()
@@ -305,4 +309,8 @@ def add_train_test_args(parser):
                         type=bool,
                         default=False,
                         help='Whether to do relative attention')
+    parser.add_argument('--freeze_emb',
+                        type=bool,
+                        default=True,
+                        help='Whether to freeze word embeddings.')
     
