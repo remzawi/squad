@@ -844,6 +844,93 @@ class EncoderBlock(nn.Module):
                 if pos is not None:
                     return layer(pos(x))
                 return layer(x)
+            
+class EncoderBlock3(nn.Module):
+    """
+    Encoder block for QANet
+    Support stochastic depth (set final_prob to less than 1, in th epaper they use 0.9)
+    """
+    def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, 
+                 att_drop_prob = None, final_prob = 0.9, LN_train=True, DP_residual=False,
+                 mask_pos=False,two_pos=False, rel = False,act = 'relu', 
+                 pos_emb = False, from_pretrained = True, freeze_pos = False):
+        super(EncoderBlock, self).__init__()
+        self.pos = PositionalEncoding(enc_size, 0, para_limit, False)
+        self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob, LN_train, DP_residual, act) for i in range(n_conv)])
+        self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob, LN_train, DP_residual)
+        self.ff = FeedForwardBlock(enc_size, drop_prob, LN_train, DP_residual, act=act)
+        self.n_layers = n_conv + 2
+        self.final_prob = final_prob
+        self.drop = nn.Dropout(drop_prob)
+        self.do_depth = final_prob < 1
+        if two_pos:
+            if pos_emb:
+                self.second_pos = PositionalEmbedding(enc_size, 0, para_limit, False,from_pretrained, freeze_pos)
+            else:
+                self.second_pos = self.pos
+        else:
+            self.second_pos = None
+        
+        self.two_pos = two_pos
+        self.mask_pos=mask_pos
+        self.rel = rel
+        if rel:
+            self.rel_att= MultiHeadedAttention_RPR(enc_size, n_head, 6, drop_prob)
+    def forward(self, x, mask = None, init_drop = 1, total_layers = None):
+        if self.mask_pos:
+            mask_pos = mask
+        else:
+            mask_pos = None
+        if total_layers is None:
+            total_layers = self.n_layers
+        out = self.pos(x, mask_pos) 
+        if self.do_depth:
+            for i, conv in enumerate(self.convs):
+                out = self.drop_layer(out, conv, 1 - (i+init_drop)/total_layers*(1-self.final_prob))
+            if self.two_pos:
+                out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask, self.second_pos)
+            else:
+                out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask)
+            out = self.drop_layer(out, self.ff, 1 - (init_drop + self.n_layers - 1)/total_layers*(1-self.final_prob))
+            return out
+        else:
+            for i, conv in enumerate(self.convs):
+                out = conv(out)
+            if self.two_pos:
+                out = self.second_pos(out,mask)
+                out = self.att(out, mask)
+            elif self.rel:
+                out = self.rel_att(out, mask)
+            else:
+                out = self.att(out,mask)
+            out = self.ff(out)
+            return out
+            
+    def drop_layer(self, x, layer, prob, mask = None, pos=None):
+        if self.training:
+            if torch.rand(1) < prob:
+                if mask is not None:
+                    if pos is not None:
+                        return layer(pos(x,mask), mask)
+                    else:
+                        return layer(x,mask)
+                else:
+                    if pos is not None:
+                        return layer(pos(x))
+                    else:
+                        return layer(x)
+            else:
+                return x
+        else:
+            if mask is not None:
+                if pos is not None:
+                    return layer(pos(x,mask),mask)
+                else:
+                    return layer(x, mask)
+            else:
+                if pos is not None:
+                    return layer(pos(x))
+                return layer(x)
     
     
 class StackedEncoderBlocks(nn.Module):
@@ -856,12 +943,20 @@ class StackedEncoderBlocks(nn.Module):
                  mask_pos=False,two_pos=False, rel = False, total_prob=True, act = 'relu',
                  pos_emb = False, from_pretrained = True, freeze_pos = False):
         super(StackedEncoderBlocks, self).__init__()
-        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
-                                                    att_drop_prob = att_drop_prob, final_prob=final_prob, 
-                                                    LN_train=LN_train, DP_residual=DP_residual,
-                                                    mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act,
-                                                    pos_emb = pos_emb, from_pretrained = from_pretrained, freeze_pos = freeze_pos)
-                                       for i in range(n_blocks)])
+        if pos_emb:
+            self.encoders = nn.ModuleList([EncoderBlock3(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
+                                                        att_drop_prob = att_drop_prob, final_prob=final_prob, 
+                                                        LN_train=LN_train, DP_residual=DP_residual,
+                                                        mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act,
+                                                        pos_emb = pos_emb, from_pretrained = from_pretrained, freeze_pos = freeze_pos)
+                                        for i in range(n_blocks)])
+        else:
+            self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
+                                                        att_drop_prob = att_drop_prob, final_prob=final_prob, 
+                                                        LN_train=LN_train, DP_residual=DP_residual,
+                                                        mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act,
+                                                        pos_emb = pos_emb, from_pretrained = from_pretrained, freeze_pos = freeze_pos)
+                                        for i in range(n_blocks)])
         self.total_layers = (n_conv + 2) * n_blocks
         self.layer_per_block = n_conv + 2
         self.total_prob=total_prob
