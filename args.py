@@ -144,7 +144,7 @@ def get_train_args():
                         help='Whether to perform gradient centralization')
     parser.add_argument('--final_prob',
                         type=float,
-                        default=0.9,
+                        default=1.0,
                         help='Survival probability of last layer')
     parser.add_argument('--total_drop',
                         type=bool,
