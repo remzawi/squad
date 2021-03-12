@@ -62,6 +62,28 @@ def main(args):
                       DP_residual=args.dp_res,
                       mask_pos=args.mask_pos,
                       two_pos=args.two_pos)
+    elif args.name == 'qanet2':
+        model = QANet2(word_vectors=word_vectors,
+                      char_vec=char_vec,
+                      word_len= 16,
+                      emb_size = args.hidden_size,
+                      enc_size=args.enc_size,
+                      n_head=args.n_head,
+                      LN_train=args.ln_train,
+                      DP_residual=args.dp_res,
+                      mask_pos=args.mask_pos,
+                      two_pos=args.two_pos)
+    elif args.name == 'qanet3':
+        model = QANet3(word_vectors=word_vectors,
+                      char_vec=char_vec,
+                      word_len= 16,
+                      emb_size = args.hidden_size,
+                      enc_size=args.enc_size,
+                      n_head=args.n_head,
+                      LN_train=args.ln_train,
+                      DP_residual=args.dp_res,
+                      mask_pos=args.mask_pos,
+                      two_pos=args.two_pos)
     else:
         raise ValueError('Wrong model name')
     model = nn.DataParallel(model, gpu_ids)
