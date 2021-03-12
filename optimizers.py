@@ -328,6 +328,8 @@ class Adahess(torch.optim.Optimizer):
                 p.data.copy_(p_data_fp32)
 
         return loss
+ 
+
     
 class AdamP(torch.optim.Optimizer):
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
@@ -346,7 +348,11 @@ class AdamP(torch.optim.Optimizer):
         x = view_func(x)
         y = view_func(y)
 
-        return F.cosine_similarity(x, y, dim=1, eps=eps).abs_()
+        x_norm = x.norm(dim=1).add_(eps)
+        y_norm = y.norm(dim=1).add_(eps)
+        dot = (x * y).sum(dim=1)
+
+        return dot.abs() / x_norm / y_norm
 
     def _projection(self, p, grad, perturb, delta, wd_ratio, eps):
         wd = 1
