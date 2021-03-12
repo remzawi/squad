@@ -363,7 +363,7 @@ class PositionalEmbedding(nn.Module):
 
 class PosEmbeddings(nn.Module):
     def __init__(self, hidden_size, drop_prob=0, para_limit=1000, scale=False, from_pretrained = True, freeze = True):
-        super(PositionalEncoding, self).__init__()
+        super(PosEmbeddings, self).__init__()
         self.drop = nn.Dropout(drop_prob)
         if from_pretrained:
             pe = torch.zeros(para_limit+1, hidden_size) #(max_len, hidden_size)
@@ -915,7 +915,7 @@ class EncoderBlock3(nn.Module):
     def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, 
                  att_drop_prob = None, final_prob = 0.9, LN_train=True, DP_residual=False,
                  mask_pos=False,two_pos=False, rel = False,act = 'relu'):
-        super(EncoderBlock, self).__init__()
+        super(EncoderBlock3, self).__init__()
         self.pos = PositionalEncoding2(enc_size, 0, para_limit, False)
         self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob, LN_train, DP_residual, act) for i in range(n_conv)])
         self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob, LN_train, DP_residual)
