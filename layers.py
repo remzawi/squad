@@ -775,7 +775,7 @@ class EncoderBlock(nn.Module):
         self.final_prob = final_prob
         self.drop = nn.Dropout(drop_prob)
         self.do_depth = final_prob < 1
-        if self.two_pos:
+        if two_pos:
             if pos_emb:
                 self.second_pos = PositionalEmbedding(enc_size, 0, para_limit, False,from_pretrained, freeze_pos)
             else:
@@ -787,7 +787,6 @@ class EncoderBlock(nn.Module):
         self.rel = rel
         if rel:
             self.rel_att= MultiHeadedAttention_RPR(enc_size, n_head, 6, drop_prob)
-            self.two_pos = False
     def forward(self, x, mask = None, init_drop = 1, total_layers = None):
         if self.mask_pos:
             mask_pos = mask
@@ -799,8 +798,8 @@ class EncoderBlock(nn.Module):
         if self.do_depth:
             for i, conv in enumerate(self.convs):
                 out = self.drop_layer(out, conv, 1 - (i+init_drop)/total_layers*(1-self.final_prob))
-            if self.two_pos:
-                out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask, self.pos)
+            if self.second_pos is not None:
+                out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask, self.second_pos)
             else:
                 out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask)
             out = self.drop_layer(out, self.ff, 1 - (init_drop + self.n_layers - 1)/total_layers*(1-self.final_prob))
