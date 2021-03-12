@@ -361,6 +361,68 @@ class PositionalEmbedding(nn.Module):
         x = self.drop(x)
         return x
 
+class PosEmbeddings(nn.Module):
+    def __init__(self, hidden_size, drop_prob=0, para_limit=1000, scale=False, from_pretrained = True, freeze = True):
+        super(PositionalEncoding, self).__init__()
+        self.drop = nn.Dropout(drop_prob)
+        if from_pretrained:
+            pe = torch.zeros(para_limit+1, hidden_size) #(max_len, hidden_size)
+            position = torch.arange(0, para_limit, dtype=torch.float).unsqueeze(1) #(para_limit, 1)
+            div_term = torch.exp(torch.arange(0, hidden_size, 2).float() * (-math.log(10000.0) / hidden_size)) #(hidden_size//2)
+            pe[1:, 0::2] = torch.sin(position * div_term) 
+            pe[1:, 1::2] = torch.cos(position * div_term)
+            self.emb = nn.Embedding.from_pretrained(pe, freeze = freeze)
+        else:
+            self.emb = nn.Embedding(para_limit+1,hidden_size)
+            nn.init.uniform_(self.emb.weight, -0.01, 0.01)
+        if scale:
+            self.scale_fact = hidden_size ** 0.5
+        else:
+            self.scale_fact = 1
+        
+
+    def forward(self, x):
+        pos_emb = self.emb(torch.arange(x.size(1))) # (seq_len, hidden_size)
+        return pos_emb
+
+class PositionalEncoding2(nn.Module):
+    """
+    Implements a non-trainable positional encoder based on sin and cos functions
+    Based on the implementation originaly proposed in Attention is All You Need
+    Input size: (batch_size, seq_len, hidden_size)
+    """
+    def __init__(self, hidden_size, drop_prob=0, para_limit=1000, scale=False):
+        super(PositionalEncoding2, self).__init__()
+        self.drop = nn.Dropout(drop_prob)
+        pe = torch.zeros(para_limit+1, hidden_size) #(max_len, hidden_size)
+        position = torch.arange(0, para_limit, dtype=torch.float).unsqueeze(1) #(para_limit, 1)
+        div_term = torch.exp(torch.arange(0, hidden_size, 2).float() * (-math.log(10000.0) / hidden_size)) #(hidden_size//2)
+        pe[1:, 0::2] = torch.sin(position * div_term) 
+        pe[1:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0) #(1,max_len,hidden_size)
+        self.register_buffer('pe', pe)
+        if scale:
+            self.scale_fact = hidden_size ** 0.5
+        else:
+            self.scale_fact = 1
+        
+
+    def forward(self, x, mask=None, embeddings = None):
+        if embeddings is None:
+            if mask is not None:
+                x = x * self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]*mask.unsqueeze(2).type(torch.float32)
+            else:
+                x = x * self.scale_fact + self.pe.expand(x.size(0), -1, -1)[:,:x.size(1),:]
+            x = self.drop(x)
+        else:
+            pos_emb = embeddings(x) # (seq_len, hidden_size)
+            if mask is not None:
+                
+                x = x * self.scale_fact + pos_emb.expand(x.size(0), -1, -1)*mask.unsqueeze(2).type(torch.float32)
+            else:
+                x = x * self.scale_fact + pos_emb.expand(x.size(0), -1, -1)[:,:x.size(1),:]
+            x = self.drop(x)
+        return x
     
     
 class DWConv(nn.Module):
@@ -852,10 +914,9 @@ class EncoderBlock3(nn.Module):
     """
     def __init__(self, enc_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, 
                  att_drop_prob = None, final_prob = 0.9, LN_train=True, DP_residual=False,
-                 mask_pos=False,two_pos=False, rel = False,act = 'relu', 
-                 pos_emb = False, from_pretrained = True, freeze_pos = False):
+                 mask_pos=False,two_pos=False, rel = False,act = 'relu'):
         super(EncoderBlock, self).__init__()
-        self.pos = PositionalEncoding(enc_size, 0, para_limit, False)
+        self.pos = PositionalEncoding2(enc_size, 0, para_limit, False)
         self.convs = nn.ModuleList([ConvBlock(enc_size, enc_size, kernel_size, drop_prob, LN_train, DP_residual, act) for i in range(n_conv)])
         self.att = SelfAttentionBlock(enc_size, n_head, drop_prob, att_drop_prob, LN_train, DP_residual)
         self.ff = FeedForwardBlock(enc_size, drop_prob, LN_train, DP_residual, act=act)
@@ -863,20 +924,12 @@ class EncoderBlock3(nn.Module):
         self.final_prob = final_prob
         self.drop = nn.Dropout(drop_prob)
         self.do_depth = final_prob < 1
-        if two_pos:
-            if pos_emb:
-                self.second_pos = PositionalEmbedding(enc_size, 0, para_limit, False,from_pretrained, freeze_pos)
-            else:
-                self.second_pos = self.pos
-        else:
-            self.second_pos = None
-        
         self.two_pos = two_pos
         self.mask_pos=mask_pos
         self.rel = rel
         if rel:
             self.rel_att= MultiHeadedAttention_RPR(enc_size, n_head, 6, drop_prob)
-    def forward(self, x, mask = None, init_drop = 1, total_layers = None):
+    def forward(self, x, mask = None, init_drop = 1, total_layers = None, embeddings = None):
         if self.mask_pos:
             mask_pos = mask
         else:
@@ -897,7 +950,7 @@ class EncoderBlock3(nn.Module):
             for i, conv in enumerate(self.convs):
                 out = conv(out)
             if self.two_pos:
-                out = self.second_pos(out,mask)
+                out = self.pos(x, mask, embeddings)
                 out = self.att(out, mask)
             elif self.rel:
                 out = self.rel_att(out, mask)
@@ -940,36 +993,34 @@ class StackedEncoderBlocks(nn.Module):
     """
     def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, 
                  att_drop_prob = None, final_prob = 0.9, LN_train = True, DP_residual=False,
-                 mask_pos=False,two_pos=False, rel = False, total_prob=True, act = 'relu',
-                 pos_emb = False, from_pretrained = True, freeze_pos = False):
+                 mask_pos=False,two_pos=False, rel = False, total_prob=True, act = 'relu'):
         super(StackedEncoderBlocks, self).__init__()
-        if pos_emb:
-            self.encoders = nn.ModuleList([EncoderBlock3(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
+
+        self.encoders = nn.ModuleList([EncoderBlock3(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
                                                         att_drop_prob = att_drop_prob, final_prob=final_prob, 
                                                         LN_train=LN_train, DP_residual=DP_residual,
-                                                        mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act,
-                                                        pos_emb = pos_emb, from_pretrained = from_pretrained, freeze_pos = freeze_pos)
+                                                        mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act)
                                         for i in range(n_blocks)])
-        else:
-            self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
-                                                        att_drop_prob = att_drop_prob, final_prob=final_prob, 
-                                                        LN_train=LN_train, DP_residual=DP_residual,
-                                                        mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act,
-                                                        pos_emb = pos_emb, from_pretrained = from_pretrained, freeze_pos = freeze_pos)
-                                        for i in range(n_blocks)])
+        #else:
+        #    self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
+        #                                                att_drop_prob = att_drop_prob, final_prob=final_prob, 
+        #                                                LN_train=LN_train, DP_residual=DP_residual,
+        #                                                mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act,
+        #                                                pos_emb = pos_emb, from_pretrained = from_pretrained, freeze_pos = freeze_pos)
+        #                                for i in range(n_blocks)])
         self.total_layers = (n_conv + 2) * n_blocks
         self.layer_per_block = n_conv + 2
         self.total_prob=total_prob
-    def forward(self, x, mask = None):
+    def forward(self, x, mask = None, embeddings = None):
         if self.total_prob:
             current_init = 1
             for encoder in self.encoders:
-                x = encoder(x, mask, current_init, self.total_layers)
+                x = encoder(x, mask, current_init, self.total_layers, embeddings)
                 current_init += self.layer_per_block
             return x
         else:
             for encoder in self.encoders:
-                x=encoder(x, mask)
+                x=encoder(x, mask, embeddings=embeddings)
             return x
   
 

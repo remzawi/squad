@@ -255,7 +255,14 @@ class QANet2(nn.Module):
                                          drop_prob=0,
                                          bias=True)
         
-        self.emb_enc = layers.EncoderBlock(enc_size=enc_size,
+        self.pos_emb = layers.PosEmbeddings(hidden_size=enc_size,
+                                            drop_prob=0,
+                                            para_limit=1000,
+                                            scale=False,
+                                            from_pretrained=False,
+                                            freeze = False)
+        
+        self.emb_enc = layers.EncoderBlock3(enc_size=enc_size,
                                            para_limit=1000,
                                            n_conv=4,
                                            kernel_size=7,
@@ -268,10 +275,7 @@ class QANet2(nn.Module):
                                            mask_pos=mask_pos,
                                            two_pos=two_pos,
                                            rel=rel,
-                                           act='gelu',
-                                           pos_emb=False,
-                                           from_pretrained=True,
-                                           freeze_pos=False)
+                                           act='gelu')
         
         self.att = layers.BiDAFAttention(hidden_size=enc_size,
                                          drop_prob=0)
@@ -321,8 +325,8 @@ class QANet2(nn.Module):
         c_res_emb = self.emb_resize(c_emb)  # (batch_size, c_len, enc_size)
         q_res_emb = self.emb_resize(q_emb)  # (batch_size, q_len, enc_size)
         
-        c_enc = self.emb_enc(c_res_emb, c_mask)    # (batch_size, c_len, enc_size)
-        q_enc = self.emb_enc(q_res_emb, q_mask)    # (batch_size, q_len, enc_size)
+        c_enc = self.emb_enc(c_res_emb, c_mask, embeddings = self.pos_emb)    # (batch_size, c_len, enc_size)
+        q_enc = self.emb_enc(q_res_emb, q_mask, embeddings = self.pos_emb)    # (batch_size, q_len, enc_size)
         
         att = self.att(c_enc, q_enc,
                        c_mask, q_mask)    # (batch_size, c_len, 4 * enc_size)
@@ -331,9 +335,9 @@ class QANet2(nn.Module):
         
         att_res = self.att_resize(att)  # (batch_size, c_len, enc_size)
         
-        out1 = self.model_enc(att_res, c_mask)  # (batch_size, c_len, enc_size)
-        out2 = self.model_enc(out1, c_mask) # (batch_size, c_len, enc_size)
-        out3 = self.model_enc(out2, c_mask) # (batch_size, c_len, enc_size)
+        out1 = self.model_enc(att_res, c_mask, embeddings = self.pos_emb)  # (batch_size, c_len, enc_size)
+        out2 = self.model_enc(out1, c_mask, embeddings = self.pos_emb) # (batch_size, c_len, enc_size)
+        out3 = self.model_enc(out2, c_mask, embeddings = self.pos_emb) # (batch_size, c_len, enc_size)
         
         log_p1 = self.out_beg(out1, out2, c_mask) # (batch_size, c_len)
         log_p2 = self.out_end(out1, out3, c_mask) # (batch_size, c_len)
