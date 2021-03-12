@@ -779,7 +779,7 @@ class EncoderBlock(nn.Module):
             if pos_emb:
                 self.second_pos = PositionalEmbedding(enc_size, 0, para_limit, False,from_pretrained, freeze_pos)
             else:
-                self.second_pos = self.pose
+                self.second_pos = self.pos
         else:
             self.second_pos = None
         
