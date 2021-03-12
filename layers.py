@@ -775,6 +775,7 @@ class EncoderBlock(nn.Module):
         self.final_prob = final_prob
         self.drop = nn.Dropout(drop_prob)
         self.do_depth = final_prob < 1
+        '''
         if two_pos:
             if pos_emb:
                 self.second_pos = PositionalEmbedding(enc_size, 0, para_limit, False,from_pretrained, freeze_pos)
@@ -782,7 +783,8 @@ class EncoderBlock(nn.Module):
                 self.second_pos = self.pos
         else:
             self.second_pos = None
-        
+        '''
+        self.two_pos = two_pos
         self.mask_pos=mask_pos
         self.rel = rel
         if rel:
@@ -798,8 +800,8 @@ class EncoderBlock(nn.Module):
         if self.do_depth:
             for i, conv in enumerate(self.convs):
                 out = self.drop_layer(out, conv, 1 - (i+init_drop)/total_layers*(1-self.final_prob))
-            if self.second_pos is not None:
-                out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask, self.second_pos)
+            if self.two_pos:
+                out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask, self.pos)
             else:
                 out = self.drop_layer(out, self.att, 1 - (init_drop + self.n_layers - 2)/total_layers*(1-self.final_prob), mask)
             out = self.drop_layer(out, self.ff, 1 - (init_drop + self.n_layers - 1)/total_layers*(1-self.final_prob))
@@ -807,8 +809,8 @@ class EncoderBlock(nn.Module):
         else:
             for i, conv in enumerate(self.convs):
                 out = conv(out)
-            if self.second_pos is not None:
-                out = self.second_pos(out,mask)
+            if self.two_pos:
+                out = self.pos(out,mask)
                 out = self.att(out, mask)
             elif self.rel:
                 out = self.rel_att(out, mask)
