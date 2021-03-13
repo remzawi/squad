@@ -273,7 +273,7 @@ class QANet2(nn.Module):
                                            act='gelu',                                           
                                            pos_emb=True,
                                            from_pretrained=False,
-                                           freeze_pos=False))
+                                           freeze_pos=False)
         
         self.att = layers.BiDAFAttention(hidden_size=enc_size,
                                          drop_prob=0)
