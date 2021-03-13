@@ -205,8 +205,8 @@ def main(args):
                 if i%args.acc_step == 0:
                     nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                     optimizer.step()
-                    scheduler.step(step // (args.acc_step*batch_size))
-                    ema(model, step // (args.acc_step*batch_size))
+                    scheduler.step(i // (args.acc_step))
+                    ema(model, i // (args.acc_step))
                     optimizer.zero_grad()
 
                 # Log info
