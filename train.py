@@ -153,7 +153,8 @@ def main(args):
         scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
     elif args.opt == 'adamp':
         optimizer = AdamP(model.parameters(), args.lr,
-                                   weight_decay=3*1e-7)
+                          betas=(0.8, 0.99),eps=1e-7,
+                          weight_decay=3*1e-7)
         scheduler = warmup(optimizer, 1, 2000)
     elif args.opt == 'lamb':
         optimizer = Lamb(model.parameters(), args.lr,
