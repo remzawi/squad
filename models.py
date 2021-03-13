@@ -276,7 +276,7 @@ class QANet2(nn.Module):
                                            freeze_pos=False)
         
         self.att = layers.BiDAFAttention(hidden_size=enc_size,
-                                         drop_prob=0)
+                                         drop_prob=drop_prob)
         
         self.gelu = layers.GeluBlock(hidden_size=4*enc_size,
                                      drop_prob=drop_prob)
@@ -369,7 +369,7 @@ class QANet3(nn.Module):
                                             drop_prob=0,
                                             para_limit=1000,
                                             scale=False,
-                                            from_pretrained=False,
+                                            from_pretrained=True,
                                             freeze = False)
         
         self.emb_enc = layers.EncoderBlock3(enc_size=enc_size,
@@ -390,7 +390,7 @@ class QANet3(nn.Module):
         self.att = layers.BiDAFAttention(hidden_size=enc_size,
                                          drop_prob=drop_prob)
         
-        self.gelu = layers.HighwayEncoder(num_layers=2,
+        self.gelu = layers.HighwayEncoder(num_layers=1,
                                           hidden_size=4 * enc_size,
                                           drop_prob=drop_prob,
                                           act='gelu')
