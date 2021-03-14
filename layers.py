@@ -1045,10 +1045,13 @@ class OutputBlock2(nn.Module):
     """
     def __init__(self, hidden_size):
         super(OutputBlock2, self).__init__() 
-        self.proj = nn.Linear(hidden_size, 1)
+        self.proj1 = nn.Linear(hidden_size, 1)
+        self.proj2 = nn.Linear(hidden_size, 1)
         
-    def forward(self, x, mask):
-        proj = self.proj(x)
+    def forward(self, x1, x2, mask):
+        proj1 = self.proj1(x1)
+        proj2 = self.proj2(x2)
+        proj = (proj1+proj2)/2
         log_p = masked_softmax(proj.squeeze(), mask, log_softmax=True)
         return log_p
            

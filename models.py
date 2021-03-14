@@ -533,10 +533,8 @@ class QANet4(nn.Module):
                                                      total_prob=total_prob,
                                                      act='gelu')
         
-        self.out_1 = layers.OutputBlock2(enc_size)
-        self.out_2 = layers.OutputBlock2(enc_size)
-        self.out_3 = layers.OutputBlock2(enc_size)
-        self.out_4 = layers.OutputBlock2(enc_size)
+        self.out_beg = layers.OutputBlock2(enc_size)
+        self.out_end = layers.OutputBlock2(enc_size)
         
         self.drop = nn.Dropout(drop_prob)
 
@@ -568,15 +566,7 @@ class QANet4(nn.Module):
         out3 = self.model_enc(out2, c_mask, embeddings = self.pos_emb) # (batch_size, c_len, enc_size)
         out4 = self.model_enc(out3, c_mask, embeddings = self.pos_emb) # (batch_size, c_len, enc_size)
         
-        p_1 = self.out_1(out1,c_mask)
-        p_2 = self.out_2(out2,c_mask)
-        p_3 = self.out_3(out3,c_mask)
-        p_4 = self.out_4(out4,c_mask)
-        
-        log_p1 = torch.log((torch.exp(p_1)+torch.exp(p_3))/2)
-        log_p2 = torch.log((torch.exp(p_2)+torch.exp(p_4))/2)
-        
-        #log_p1 = self.out_beg(out1, out2, c_mask) # (batch_size, c_len)
-        #log_p2 = self.out_end(out1, out3, c_mask) # (batch_size, c_len)
+        log_p1 = self.out_beg(out1, out3, c_mask) # (batch_size, c_len)
+        log_p2 = self.out_end(out2, out4, c_mask) # (batch_size, c_len)
         
         return log_p1, log_p2
