@@ -370,7 +370,7 @@ class QANet3(nn.Module):
                                             para_limit=1000,
                                             scale=False,
                                             from_pretrained=True,
-                                            freeze = False)
+                                            freeze = True)
         
         self.emb_enc = layers.EncoderBlock3(enc_size=enc_size,
                                            para_limit=1000,
