@@ -533,8 +533,8 @@ class QANet4(nn.Module):
                                                      total_prob=total_prob,
                                                      act='gelu')
         
-        self.out_beg = layers.OutputBlock2(enc_size)
-        self.out_end = layers.OutputBlock2(enc_size)
+        self.out_beg = layers.OutputBlock(enc_size)
+        self.out_end = layers.OutputBlock(enc_size)
         
         self.drop = nn.Dropout(drop_prob)
 
