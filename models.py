@@ -573,8 +573,8 @@ class QANet4(nn.Module):
         p_3 = self.out_3(out3,c_mask)
         p_4 = self.out_4(out4,c_mask)
         
-        log_p1 = torch.log((p_1+p_3)/2)
-        log_p2 = torch.log((p_2+p_4)/2)
+        log_p1 = torch.log((torch.exp(p_1)+torch.exp(p_3))/2)
+        log_p2 = torch.log((torch.exp(p_2)+torch.exp(p_4))/2)
         
         #log_p1 = self.out_beg(out1, out2, c_mask) # (batch_size, c_len)
         #log_p2 = self.out_end(out1, out3, c_mask) # (batch_size, c_len)

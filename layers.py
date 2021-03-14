@@ -1049,7 +1049,7 @@ class OutputBlock2(nn.Module):
         
     def forward(self, x, mask):
         proj = self.proj(x)
-        log_p = masked_softmax(proj.squeeze(), mask, log_softmax=False)
+        log_p = masked_softmax(proj.squeeze(), mask, log_softmax=True)
         return log_p
            
 
