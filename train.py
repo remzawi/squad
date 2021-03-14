@@ -18,7 +18,7 @@ from optimizers import AdamW, AdamWGC, AdamP, Lamb
 from args import get_train_args
 from collections import OrderedDict
 from json import dumps
-from models import BiDAF, BiDAFChar, QANet, QANet2, QANet3
+from models import BiDAF, BiDAFChar, QANet, QANet2, QANet3, QANet4
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from ujson import load as json_load
@@ -91,6 +91,22 @@ def main(args):
                       freeze=args.freeze_emb)
     elif args.name == 'qanet3':
         model = QANet3(word_vectors=word_vectors,
+                      char_vec=char_vec,
+                      word_len= 16,
+                      emb_size = args.hidden_size,
+                      drop_prob=args.drop_prob,
+                      enc_size=args.enc_size,
+                      n_head=args.n_head,
+                      LN_train=args.ln_train,
+                      DP_residual=args.dp_res,
+                      mask_pos=args.mask_pos,
+                      two_pos=args.two_pos,
+                      rel=args.rel_att,
+                      total_prob=args.total_drop,
+                      final_prob=args.final_prob,
+                      freeze=args.freeze_emb)
+    elif args.name == 'qanet4':
+        model = QANet4(word_vectors=word_vectors,
                       char_vec=char_vec,
                       word_len= 16,
                       emb_size = args.hidden_size,

@@ -1039,6 +1039,18 @@ class OutputBlock(nn.Module):
         log_p = masked_softmax(proj.squeeze(), mask, log_softmax=True)
         return log_p
         
+class OutputBlock2(nn.Module):
+    """
+    One output block for QANet (for either start or end position)
+    """
+    def __init__(self, hidden_size):
+        super(OutputBlock2, self).__init__() 
+        self.proj = nn.Linear(hidden_size, 1)
+        
+    def forward(self, x, mask):
+        proj = self.proj(x)
+        log_p = masked_softmax(proj.squeeze(), mask, log_softmax=False)
+        return log_p
            
 
     
