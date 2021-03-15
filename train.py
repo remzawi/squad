@@ -18,7 +18,7 @@ from optimizers import AdamW, AdamWGC, AdamP, Lamb
 from args import get_train_args
 from collections import OrderedDict
 from json import dumps
-from models import BiDAF, BiDAFChar, QANet, QANet2, QANet3, QANet4
+from models import BiDAF, BiDAFChar, BiDAFChar2, QANet, QANet2, QANet3, QANet4
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from ujson import load as json_load
@@ -55,6 +55,12 @@ def main(args):
                     drop_prob=args.drop_prob)
     elif args.name == 'charembeddings':
         model = BiDAFChar(word_vectors=word_vectors,
+                    char_vec = char_vec,
+                    word_len = 16,
+                    hidden_size=args.hidden_size,
+                    drop_prob=args.drop_prob)
+    elif args.name == 'charembeddings2':
+        model = BiDAFChar2(word_vectors=word_vectors,
                     char_vec = char_vec,
                     word_len = 16,
                     hidden_size=args.hidden_size,
@@ -121,6 +127,12 @@ def main(args):
                       total_prob=args.total_drop,
                       final_prob=args.final_prob,
                       freeze=args.freeze_emb)
+    elif args.name == 'charembeddings2':
+        model = BiDAFChar(word_vectors=word_vectors,
+                    char_vec = char_vec,
+                    word_len = 16,
+                    hidden_size=args.hidden_size,
+                    drop_prob=args.drop_prob)
     else:
         raise ValueError('Wrong model name')
         
