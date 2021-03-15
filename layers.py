@@ -383,7 +383,7 @@ class PosEmbeddings(nn.Module):
 
     def forward(self, x):
         pos_emb = self.emb(torch.arange(x.size(1)).cuda()) # (seq_len, hidden_size)
-        return pos_emb
+        return pos_emb.unsqueeze(0)
 
 class PositionalEncoding2(nn.Module):
     """
