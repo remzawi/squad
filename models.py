@@ -245,7 +245,7 @@ class QANet(nn.Module):
                                            two_pos=two_pos)
         
         self.att = layers.BiDAFAttention(hidden_size=enc_size,
-                                         drop_prob=0)
+                                         drop_prob=drop_prob)
         
         self.att_resize = layers.Resizer(input_size=4*enc_size,
                                          output_size=enc_size,

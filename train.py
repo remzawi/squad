@@ -154,7 +154,14 @@ def main(args):
                                  log=log)
 
     # Get optimizer and scheduler
-    if args.opt == 'adam':
+    
+    if args.name == 'qanet':
+        optimizer = optim.Adam(model.parameters(), args.lr,
+                               betas=(0.8, 0.999),
+                               weight_decay=3*1e-7,
+                               eps=1e-7)
+        scheduler = warmup(optimizer, 1, 2000)
+    elif args.opt == 'adam':
         #optimizer = optim.Adam(model.parameters(), args.lr,
         #                       betas=(0.8, 0.999),
         #                       weight_decay=3*1e-7,
