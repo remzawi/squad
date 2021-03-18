@@ -106,7 +106,7 @@ def main(args):
                     char_vec = char_vec,
                     word_len = 16,
                     hidden_size=args.hidden_size2)
-    elif args.name == 'charembeddings2':
+    elif args.name2 == 'charembeddings2':
         model2 = BiDAFChar2(word_vectors=word_vectors,
                     char_vec = char_vec,
                     word_len = 16,
