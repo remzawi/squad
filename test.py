@@ -46,6 +46,11 @@ def main(args):
     if args.name == 'baseline':
         model = BiDAF(word_vectors=word_vectors,
                     hidden_size=args.hidden_size)
+    elif args.name == 'charembeddings':
+        model = BiDAFChar(word_vectors=word_vectors,
+                    char_vec = char_vec,
+                    word_len = 16,
+                    hidden_size=args.hidden_size)
     elif args.name == 'charembeddings2':
         model = BiDAFChar2(word_vectors=word_vectors,
                     char_vec = char_vec,
