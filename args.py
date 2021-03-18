@@ -202,6 +202,18 @@ def get_test_args():
                         type=int,
                         default=100,
                         help='Number of features in encoder hidden layers for second model.')
+    parser.add_argument('--name3',
+                        type=str,
+                        required=False,
+                        help='Name to identify training or test run for ensemble.')
+    parser.add_argument('--load_path_3',
+                        type=str,
+                        default=None,
+                        help='Path to load as a model checkpoint for ensemble.')
+    parser.add_argument('--hidden_size3',
+                        type=int,
+                        default=100,
+                        help='Number of features in encoder hidden layers for second model.')
 
     # Require load_path for test.py
     args = parser.parse_args()

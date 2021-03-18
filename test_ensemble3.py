@@ -21,7 +21,7 @@ import util
 from args import get_test_args
 from collections import OrderedDict
 from json import dumps
-from models import BiDAF, BiDAFChar, QANet, QANet2, QANet3
+from models import BiDAF, BiDAFChar, BiDAFChar2,QANet, QANet2, QANet3
 from os.path import join
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -48,6 +48,11 @@ def main(args):
                     hidden_size=args.hidden_size)
     elif args.name == 'charembeddings':
         model = BiDAFChar(word_vectors=word_vectors,
+                    char_vec = char_vec,
+                    word_len = 16,
+                    hidden_size=args.hidden_size)
+    elif args.name == 'charembeddings2':
+        model = BiDAFChar2(word_vectors=word_vectors,
                     char_vec = char_vec,
                     word_len = 16,
                     hidden_size=args.hidden_size)
@@ -101,6 +106,11 @@ def main(args):
                     char_vec = char_vec,
                     word_len = 16,
                     hidden_size=args.hidden_size2)
+    elif args.name2 == 'charembeddings2':
+        model2 = BiDAFChar2(word_vectors=word_vectors,
+                    char_vec = char_vec,
+                    word_len = 16,
+                    hidden_size=args.hidden_size2)
     elif args.name2 == 'qanet':
         model2 = QANet(word_vectors=word_vectors,
                       char_vec=char_vec,
@@ -123,8 +133,8 @@ def main(args):
                       DP_residual=args.dp_res,
                       mask_pos=args.mask_pos,
                       two_pos=args.two_pos)
-    elif args.name3 == 'qanet3':
-        model3 = QANet3(word_vectors=word_vectors,
+    elif args.name2 == 'qanet3':
+        model2 = QANet3(word_vectors=word_vectors,
                       char_vec=char_vec,
                       word_len= 16,
                       emb_size = args.hidden_size2,
@@ -141,6 +151,61 @@ def main(args):
     model2 = util.load_model(model2, args.load_path_2, gpu_ids, return_step=False)
     model2 = model2.to(device)
     model2.eval()
+    
+    if args.name3 == 'baseline':
+        model3 = BiDAF(word_vectors=word_vectors,
+                    hidden_size=args.hidden_size3)
+    elif args.name3 == 'charembeddings':
+        model3 = BiDAFChar(word_vectors=word_vectors,
+                    char_vec = char_vec,
+                    word_len = 16,
+                    hidden_size=args.hidden_size3)
+    elif args.name3 == 'charembeddings2':
+        model3 = BiDAFChar2(word_vectors=word_vectors,
+                    char_vec = char_vec,
+                    word_len = 16,
+                    hidden_size=args.hidden_size3)
+    elif args.name3 == 'qanet':
+        model3 = QANet(word_vectors=word_vectors,
+                      char_vec=char_vec,
+                      word_len= 16,
+                      emb_size = args.hidden_size3,
+                      enc_size=args.enc_size,
+                      n_head=args.n_head,
+                      LN_train=args.ln_train,
+                      DP_residual=args.dp_res,
+                      mask_pos=args.mask_pos,
+                      two_pos=args.two_pos)
+    elif args.name3 == 'qanet2':
+        model3 = QANet2(word_vectors=word_vectors,
+                      char_vec=char_vec,
+                      word_len= 16,
+                      emb_size = args.hidden_size3,
+                      enc_size=args.enc_size,
+                      n_head=args.n_head,
+                      LN_train=args.ln_train,
+                      DP_residual=args.dp_res,
+                      mask_pos=args.mask_pos,
+                      two_pos=args.two_pos)
+    elif args.name3 == 'qanet3':
+        model3 = QANet3(word_vectors=word_vectors,
+                      char_vec=char_vec,
+                      word_len= 16,
+                      emb_size = args.hidden_size3,
+                      enc_size=args.enc_size,
+                      n_head=args.n_head,
+                      LN_train=args.ln_train,
+                      DP_residual=args.dp_res,
+                      mask_pos=args.mask_pos,
+                      two_pos=args.two_pos)
+    else:
+        raise ValueError('Wrong model name')
+    model3 = nn.DataParallel(model3, gpu_ids)
+    log.info(f'Loading checkpoint from {args.load_path_3}...')
+    model3 = util.load_model(model3, args.load_path_3, gpu_ids, return_step=False)
+    model3 = model3.to(device)
+    model3.eval()
+    
 
     # Get data loader
     log.info('Building dataset...')
@@ -173,10 +238,11 @@ def main(args):
             # Forward
             log_p1_1, log_p2_1 = model(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
             log_p1_2, log_p2_2 = model2(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
+            log_p1_3, log_p2_3 = model3(cw_idxs, cc_idxs, qw_idxs, qc_idxs)
             #log_p1 = weight * log_p1_1 + (1-weight) * log_p1_2
             #log_p2 = weight * log_p2_1 + (1-weight) * log_p2_2
-            log_p1 = torch.log(weight * torch.exp(log_p1_1) + (1-weight) * torch.exp(log_p1_2))
-            log_p2 = torch.log(weight * torch.exp(log_p2_1) + (1-weight) * torch.exp(log_p2_2))
+            log_p1 = torch.log(weight * torch.exp(log_p1_1) + (1-weight)/2 * torch.exp(log_p1_2) + (1-weight)/2 * torch.exp(log_p1_3))
+            log_p2 = torch.log(weight * torch.exp(log_p2_1) + (1-weight)/2 * torch.exp(log_p2_2) + (1-weight)/2 * torch.exp(log_p2_3))
             y1, y2 = y1.to(device), y2.to(device)
             loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
             nll_meter.update(loss.item(), batch_size)

@@ -151,6 +151,7 @@ def main(args):
     model2 = util.load_model(model2, args.load_path_2, gpu_ids, return_step=False)
     model2 = model2.to(device)
     model2.eval()
+    
 
     # Get data loader
     log.info('Building dataset...')
