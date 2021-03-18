@@ -127,12 +127,6 @@ def main(args):
                       total_prob=args.total_drop,
                       final_prob=args.final_prob,
                       freeze=args.freeze_emb)
-    elif args.name == 'charembeddings2':
-        model = BiDAFChar(word_vectors=word_vectors,
-                    char_vec = char_vec,
-                    word_len = 16,
-                    hidden_size=args.hidden_size,
-                    drop_prob=args.drop_prob)
     else:
         raise ValueError('Wrong model name')
         

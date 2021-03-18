@@ -21,7 +21,7 @@ import util
 from args import get_test_args
 from collections import OrderedDict
 from json import dumps
-from models import BiDAF, BiDAFChar, QANet, QANet2, QANet3
+from models import BiDAF, BiDAFChar, BiDAFChar2 ,QANet, QANet2, QANet3
 from os.path import join
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -46,8 +46,8 @@ def main(args):
     if args.name == 'baseline':
         model = BiDAF(word_vectors=word_vectors,
                     hidden_size=args.hidden_size)
-    elif args.name == 'charembeddings':
-        model = BiDAFChar(word_vectors=word_vectors,
+    elif args.name == 'charembeddings2':
+        model = BiDAFChar2(word_vectors=word_vectors,
                     char_vec = char_vec,
                     word_len = 16,
                     hidden_size=args.hidden_size)
