@@ -984,9 +984,45 @@ class EncoderBlock3(nn.Module):
                 if pos is not None:
                     return layer(pos(x))
                 return layer(x)
-    
-    
+   
 class StackedEncoderBlocks(nn.Module):
+    """
+    Stack multiple encoer blocks
+    Applies the stochastic depth along the entire set of blocks
+    """
+    def __init__(self, n_blocks, hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = 8, 
+                 att_drop_prob = None, final_prob = 0.9, LN_train = True, DP_residual=False,
+                 mask_pos=False,two_pos=False, rel = False, total_prob=True, act = 'relu'):
+        super(StackedEncoderBlocks, self).__init__()
+
+        self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
+                                                        att_drop_prob = att_drop_prob, final_prob=final_prob, 
+                                                        LN_train=LN_train, DP_residual=DP_residual,
+                                                        mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act)
+                                        for i in range(n_blocks)])
+        #else:
+        #    self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
+        #                                                att_drop_prob = att_drop_prob, final_prob=final_prob, 
+        #                                                LN_train=LN_train, DP_residual=DP_residual,
+        #                                                mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act,
+        #                                                pos_emb = pos_emb, from_pretrained = from_pretrained, freeze_pos = freeze_pos)
+        #                                for i in range(n_blocks)])
+        self.total_layers = (n_conv + 2) * n_blocks
+        self.layer_per_block = n_conv + 2
+        self.total_prob=total_prob
+    def forward(self, x, mask = None, embeddings = None):
+        if self.total_prob:
+            current_init = 1
+            for encoder in self.encoders:
+                x = encoder(x, mask, current_init, self.total_layers, embeddings)
+                current_init += self.layer_per_block
+            return x
+        else:
+            for encoder in self.encoders:
+                x=encoder(x, mask, embeddings=embeddings)
+            return x    
+    
+class StackedEncoderBlocks3(nn.Module):
     """
     Stack multiple encoer blocks
     Applies the stochastic depth along the entire set of blocks
