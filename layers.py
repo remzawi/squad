@@ -1010,11 +1010,11 @@ class StackedEncoderBlocks(nn.Module):
         self.total_layers = (n_conv + 2) * n_blocks
         self.layer_per_block = n_conv + 2
         self.total_prob=total_prob
-    def forward(self, x, mask = None, embeddings = None):
+    def forward(self, x, mask = None):
         if self.total_prob:
             current_init = 1
             for encoder in self.encoders:
-                x = encoder(x, mask, current_init, self.total_layers, embeddings)
+                x = encoder(x, mask, current_init, self.total_layers)
                 current_init += self.layer_per_block
             return x
         else:
