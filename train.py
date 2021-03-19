@@ -13,7 +13,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as sched
 import torch.utils.data as data
 import util
-from optimizers import AdamW, AdamWGC, AdamP, Lamb
+from optimizers import AdamW, AdamWGC
 
 from args import get_train_args
 from collections import OrderedDict
@@ -156,10 +156,6 @@ def main(args):
                                eps=1e-7)
         scheduler = warmup(optimizer, 1, 2000)
     elif args.opt == 'adam':
-        #optimizer = optim.Adam(model.parameters(), args.lr,
-        #                       betas=(0.8, 0.999),
-        #                       weight_decay=3*1e-7,
-        #                       eps=1e-7)
         if args.grad_cent:
             optimizer = AdamWGC(model.parameters(), args.lr,
                                 betas=(0.9, 0.999),
@@ -180,15 +176,6 @@ def main(args):
         optimizer = optim.SGD(model.parameters(), args.lr,
                                    weight_decay=3*1e-7)
         scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
-    elif args.opt == 'adamp':
-        optimizer = AdamP(model.parameters(), args.lr,
-                          betas=(0.9, 0.999),eps=1e-7,
-                          weight_decay=3*1e-7)
-        scheduler = warmup(optimizer, 1, 2000)
-    elif args.opt == 'lamb':
-        optimizer = Lamb(model.parameters(), args.lr,
-                                   weight_decay=3*1e-7)
-        scheduler = warmup(optimizer, 1, 2000)
 
     # Get data loader
     log.info('Building dataset...')

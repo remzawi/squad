@@ -605,65 +605,7 @@ class SelfAttentionBlock(nn.Module):
         else:
             return x+self.drop(att)
         
-class EfficientAttention(nn.Module):
-    
-    def __init__(self, hidden_size, n_head, drop_prob=0.1):
-        super().__init__()
-        #self.in_channels = in_channels
-        #self.key_channels = key_channels
-        self.n_head = n_head
-        #self.value_channels = value_channels
 
-        #self.keys = nn.Conv2d(in_channels, key_channels, 1)
-        #self.queries = nn.Conv2d(in_channels, key_channels, 1)
-        #self.values = nn.Conv2d(in_channels, value_channels, 1)
-        #self.reprojection = nn.Conv2d(value_channels, in_channels, 1)
-        self.keys = DWConv(hidden_size, hidden_size, 1, bias = True, act=False)
-        self.queries = DWConv(hidden_size, hidden_size, 1, bias = True, act=False)
-        self.values = DWConv(hidden_size, hidden_size, 1, bias = True, act=False)
-        self.reprojection = DWConv(hidden_size, hidden_size, 1, bias = True, act=False)
-        self.drop=nn.Dropout(drop_prob)
-
-    def forward(self,x,mask):
-        B, L, H = x.sixe()
-        keys=self.keys(x).permute(0,2,1)
-        queries=self.queries(x).permute(0,2,1)
-        values=self.values(x).permute(0,2,1)
-        #keys = self.keys(input_).reshape((n, self.key_channels, h * w))
-        #queries = self.queries(input_).reshape(n, self.key_channels, h * w)
-        #values = self.values(input_).reshape((n, self.value_channels, h * w))
-        head_key_channels = H // self.n_head
-        head_value_channels = H // self.n_head
-        mask=mask.unsqueeze(1)
-        attended_values = []
-        for i in range(self.n_head):
-            key = masked_softmax(keys[
-                :,
-                i * head_key_channels: (i + 1) * head_key_channels,
-                :
-            ], mask,dim=2)
-            query = masked_softmax(queries[
-                :,
-                i * head_key_channels: (i + 1) * head_key_channels,
-                :
-            ], mask, dim=1)
-            value = values[
-                :,
-                i * head_value_channels: (i + 1) * head_value_channels,
-                :
-            ]
-            context = key @ value.transpose(1, 2)
-            attended_value = (
-                context.transpose(1, 2) @ query
-            )
-            attended_values.append(attended_value)
-
-        aggregated_values = torch.cat(attended_values, dim=1)
-        reprojected_value = self.reprojection(self.drop(aggregated_values.permute(0,2,1)))
-
-        return reprojected_value
-    
-class MultiHeadedAttention_RPR(nn.Module):
     """ @ author: Yekun CHAI 
     https://ychai.uk/notes/2019/10/17/NN/Transformer-variants-a-peek/"""
     def __init__(self, hidden_size, n_head, max_relative_position, dropout=.0):
@@ -1000,17 +942,10 @@ class StackedEncoderBlocks(nn.Module):
                                                         LN_train=LN_train, DP_residual=DP_residual,
                                                         mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act)
                                         for i in range(n_blocks)])
-        #else:
-        #    self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
-        #                                                att_drop_prob = att_drop_prob, final_prob=final_prob, 
-        #                                                LN_train=LN_train, DP_residual=DP_residual,
-        #                                                mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act,
-        #                                                pos_emb = pos_emb, from_pretrained = from_pretrained, freeze_pos = freeze_pos)
-        #                                for i in range(n_blocks)])
         self.total_layers = (n_conv + 2) * n_blocks
         self.layer_per_block = n_conv + 2
         self.total_prob=total_prob
-    def forward(self, x, mask = None):
+    def forward(self, x, mask = None, embeddings = None):
         if self.total_prob:
             current_init = 1
             for encoder in self.encoders:
@@ -1037,13 +972,6 @@ class StackedEncoderBlocks3(nn.Module):
                                                         LN_train=LN_train, DP_residual=DP_residual,
                                                         mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act)
                                         for i in range(n_blocks)])
-        #else:
-        #    self.encoders = nn.ModuleList([EncoderBlock(hidden_size, para_limit, n_conv, kernel_size, drop_prob, n_head = n_head, 
-        #                                                att_drop_prob = att_drop_prob, final_prob=final_prob, 
-        #                                                LN_train=LN_train, DP_residual=DP_residual,
-        #                                                mask_pos=mask_pos, two_pos=two_pos, rel = rel, act = act,
-        #                                                pos_emb = pos_emb, from_pretrained = from_pretrained, freeze_pos = freeze_pos)
-        #                                for i in range(n_blocks)])
         self.total_layers = (n_conv + 2) * n_blocks
         self.layer_per_block = n_conv + 2
         self.total_prob=total_prob
